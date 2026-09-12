@@ -1,0 +1,70 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
+}
+
+version = mod_version
+
+repositories {
+    maven {
+        name = "Nucleoid"
+        url = uri("https://maven.nucleoid.xyz")
+    }
+}
+
+loom {
+    splitEnvironmentSourceSets()
+
+    mods {
+        "polycoin" {
+            sourceSet sourceSets.main
+        }
+    }
+
+    runs.configureEach { preferGradleTask.set(true) }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+    implementation "eu.pb4:common-economy-api:${common_economy_api_version}"
+    include "eu.pb4:common-economy-api:${common_economy_api_version}"
+}
+
+processResources {
+    def resourceProperties = [
+            mod_id: mod_id,
+            mod_name: mod_name,
+            mod_version: mod_version,
+            minecraft_version: minecraft_version,
+            loader_version: loader_version,
+            java_version: java_version,
+            fabric_api_version: fabric_api_version
+    ]
+    inputs.properties(resourceProperties)
+    filesMatching("fabric.mod.json") {
+        expand(resourceProperties)
+    }
+}
+
+def targetJavaVersion = java_version as int
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release = targetJavaVersion
+    options.compilerArgs.add("-Xlint:all,-classfile")
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    withSourcesJar()
+}
+
+jar {
+    def licenseFileName = "LICENSE_${mod_id}"
+    from("LICENSE") {
+        rename("LICENSE", licenseFileName)
+    }
+}

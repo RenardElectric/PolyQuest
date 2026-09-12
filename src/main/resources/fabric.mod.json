@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${mod_version}",
+  "name": "${mod_name}",
+  "description": "Utility library for PolyCube",
+  "authors": [
+    "RenardElectric"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/polyquest/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "polycube.polyquest.PolyQuest"
+    ]
+  },
+  "depends": {
+    "java": ">=${java_version}",
+    "minecraft": "26.3-pre.3",
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": ">=${fabric_api_version}"
+  },
+  "mixins": [
+    "polyquest.mixins.json"
+  ]
+}

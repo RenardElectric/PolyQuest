@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/schema-catalog.json",
+  "version": 1,
+  "schemas": [
+    {
+      "name": "PolyQuest quest",
+      "description": "Quest bodies and quest-template invocations.",
+      "fileMatch": ["**/data/*/quests/**/*.json"],
+      "url": "./quest.schema.json"
+    },
+    {
+      "name": "PolyQuest quest template",
+      "description": "Reusable quest prototypes and parameter declarations.",
+      "fileMatch": ["**/data/*/quest_templates/**/*.json"],
+      "url": "./quest-template.schema.json"
+    },
+    {
+      "name": "PolyQuest reward profile",
+      "description": "Named lists of quest rewards.",
+      "fileMatch": ["**/data/*/reward_profiles/**/*.json"],
+      "url": "./reward-profile.schema.json"
+    }
+  ]
+}

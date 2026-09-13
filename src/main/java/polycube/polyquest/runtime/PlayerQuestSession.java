@@ -1,11 +1,10 @@
 package polycube.polyquest.runtime;
 
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import org.jetbrains.annotations.Nullable;
 import polycube.polyquest.model.QuestModel;
 
 /// In-memory, restart-discarded quest attempts for one player UUID.
@@ -18,8 +17,8 @@ public final class PlayerQuestSession {
                 ignored -> new QuestAttempt(occurrence, server));
     }
 
-    public @Nullable QuestAttempt get(QuestModel.Key key) {
-        return attempts.get(key.persistentKey());
+    public Optional<QuestAttempt> get(QuestModel.Key key) {
+        return Optional.ofNullable(attempts.get(key.persistentKey()));
     }
 
     public Iterable<QuestAttempt> attempts() {
@@ -41,17 +40,17 @@ public final class PlayerQuestSession {
         attempts.remove(key.persistentKey());
     }
 
+    /// Rebinds attempts only when the quest's behavior revision is unchanged.
     public void updatePresentation(Map<Identifier, QuestModel.Definition> definitions) {
         for (QuestAttempt attempt : attempts.values()) {
-            QuestModel.Definition definition = definitions.get(attempt.occurrence().definition().id());
-            if (definition != null
-                    && definition.behaviorHash().equals(attempt.occurrence().definition().behaviorHash())) {
+            Optional.ofNullable(definitions.get(attempt.occurrence().definition().id()))
+                    .filter(definition -> definition.behaviorHash().equals(attempt.occurrence().definition().behaviorHash()))
+                    .ifPresent(definition ->
                 attempt.updatePresentation(new QuestModel.Occurrence(
                         attempt.occurrence().key(),
                         definition,
                         attempt.occurrence().availableFrom(),
-                        attempt.occurrence().availableUntil()));
-            }
+                        attempt.occurrence().availableUntil())));
         }
     }
 }

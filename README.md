@@ -22,17 +22,15 @@ The implementation targets the Minecraft, Fabric Loader, Fabric API, mappings, a
 
 ## First in-game checkpoint
 
-The mod bundles four small data-driven test quests. They use experience rewards so the economy bridge is not needed for the first test.
+PolyQuest does not add gameplay quests by itself. Install a server datapack containing quest resources, then:
 
 1. Start a dedicated development server and join as an operator.
-2. Run `/polyquest list`.
-3. For the easy quest, run `/polyquest signal polyquest:test_easy`.
-4. Return to the center of the overworld shared spawn.
-5. Run `/polyquest claim polyquest:daily/test_easy`.
-6. Run `/reload`, then `/polyquest list`; claimed state and unchanged in-memory attempts should remain.
-7. Restart the server. Daily in-progress attempts reset, while a claimed unique quest stays claimed.
+2. Run `/polyquest list` and complete one of the listed objectives.
+3. Run `/polyquest claim <quest-id>`.
+4. Run `/reload`, then `/polyquest list`; claimed state and unchanged in-memory attempts should remain.
+5. Restart the server. In-progress attempts reset, while claimed occurrences remain claimed.
 
-The medium and hard bundled quests display the exact explicit signals needed to test sequence and time-window behavior.
+Datapacks may define any mix of daily difficulties and unique quests. Missing daily slots are simply omitted from the rotation.
 
 ## Economy provider integration
 
@@ -50,19 +48,18 @@ Money is represented by `BigDecimal`, encoded as a JSON string. The transaction 
 
 ## Server configuration
 
-The first launch creates `config/polyquest.json`:
+The first launch creates `config/polyquest.json` using the machine's current time-zone ID. For example:
 
 ```json
 {
-  "dailySeed": 5786933479488603475,
+  "dailySeed": 5786927992694719827,
   "timeZone": "Europe/Paris",
-  "claimRadius": 12.0,
   "announceRotation": true,
   "pendingRewardRetrySeconds": 30
 }
 ```
 
-`claimRadius: 0` disables the shared-spawn proximity check. Use an explicit IANA time-zone ID so moving the world to another machine does not move the reset boundary.
+Use an explicit IANA time-zone ID so moving the world to another machine does not move the reset boundary.
 
 ## Resource folders
 
@@ -74,7 +71,7 @@ data/<namespace>/reward_profiles/**/*.json
 
 Resource-path IDs are stable. For example, `data/example/quests/daily/logs.json` is `example:daily/logs`.
 
-See [`docs/DATAPACK_FORMAT.md`](docs/DATAPACK_FORMAT.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and [`docs/MILESTONES.md`](docs/MILESTONES.md).
+Draft 2020-12 schemas for all resource kinds, built-in conditions, rewards, and delegated Mojang predicate shapes are in [`schemas`](schemas/README.md). The included catalog maps each datapack folder to its schema without adding metadata to the resource JSON itself.
 
 ## Commands
 
@@ -88,13 +85,17 @@ See [`docs/DATAPACK_FORMAT.md`](docs/DATAPACK_FORMAT.md), [`docs/ARCHITECTURE.md
 /polyquest retry-rewards            # permission level 2; self for test adapter
 ```
 
-The commands are intentionally thin testing/admin adapters. A UI can call `QuestManager`, `QuestClaimService`, and `QuestAdministrationService` without duplicating quest logic.
+The commands are intentionally thin testing/admin adapters. A UI can call `QuestManager` and `QuestClaimService` without duplicating quest logic.
 
 ## Crash semantics
 
 - Attempt progress is memory-only by design and resets on process restart.
 - Claimed daily occurrences and unique completions are durable.
 - The economy bridge receives idempotency keys, allowing safe retry after an uncertain deposit.
-- Pending reward bundles are stored as registry-aware codec JSON.
+- Pending reward bundles are stored in the world's codec-backed Minecraft `SavedData`.
 - Vanilla item/experience/command rewards cannot be made exactly-once across every process-crash instruction boundary without an idempotent external sink. Money rewards through an idempotent provider are the strongest path.
-- A crash in the tiny interval between consuming a claim cost and writing the `COSTS_COMMITTED` marker can require administrator intervention. See `docs/CLAIM_TRANSACTIONS.md`.
+- A crash in the tiny interval between consuming a claim cost and writing the `COSTS_COMMITTED` marker can require administrator intervention.
+
+## Development checks
+
+Run the compact unit suite with `./gradlew test`. Run `./gradlew build` for the full compile, test, resource-processing, and remapping check.

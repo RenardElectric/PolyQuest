@@ -1,69 +1,97 @@
 package polycube.polyquest.persistence;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
+import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
-import com.mojang.serialization.DynamicOps;
-import com.mojang.serialization.JsonOps;
-import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
-import java.nio.file.AtomicMoveNotSupportedException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.util.StringRepresentable;
+import net.minecraft.util.datafix.DataFixTypes;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
+import net.minecraft.world.level.storage.SavedDataStorage;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.reward.RewardApi;
 
-/// Minimal durable world-owned ledger.
+/// Durable world-owned claim and reward state stored through Minecraft's SavedData system.
 ///
 /// Attempt progress is intentionally absent. Only successful occurrence claims,
 /// pending reward transactions, and manual reroll generations survive a restart.
-public final class QuestLedger {
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final String FILE_NAME = "polyquest-ledger.json";
+public final class QuestLedger extends SavedData {
+    private static final Codec<LocalDate> DATE_CODEC = Codec.STRING.comapFlatMap(
+            value -> {
+                try {
+                    return DataResult.success(LocalDate.parse(value));
+                } catch (DateTimeParseException exception) {
+                    return DataResult.error(() -> "Invalid date '" + value + "'");
+                }
+            },
+            LocalDate::toString);
+    private static final Codec<Integer> NON_NEGATIVE_INT = Codec.INT.comapFlatMap(
+            value -> value >= 0
+                    ? DataResult.success(value)
+                    : DataResult.error(() -> "Value must be non-negative"),
+            Function.identity());
+    private static final Codec<Set<String>> CLAIM_SET_CODEC = Codec.STRING.listOf().xmap(HashSet::new, values -> values.stream().sorted().toList());
+    private static final Codec<Map<UUID, Set<String>>> CLAIMS_CODEC = Codec.unboundedMap(UUIDUtil.STRING_CODEC, CLAIM_SET_CODEC);
+    private static final Codec<Map<QuestModel.Difficulty, Integer>> ROTATION_GENERATIONS_CODEC = Codec.unboundedMap(QuestModel.Difficulty.CODEC, NON_NEGATIVE_INT);
+    private static final Codec<List<RewardApi.Definition>> REWARDS_CODEC = RewardApi.codec().listOf();
 
-    private final MinecraftServer server;
-    private final Path path;
+    static final Codec<QuestLedger> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+            DATE_CODEC.optionalFieldOf("rotation_date", LocalDate.MIN).forGetter(ledger -> ledger.rotationDate),
+            ROTATION_GENERATIONS_CODEC.optionalFieldOf("rotation_generations", Map.of()).forGetter(ledger -> ledger.rotationGenerations),
+            CLAIMS_CODEC.optionalFieldOf("claims", Map.of()).forGetter(ledger -> ledger.claims),
+            PendingTransaction.CODEC.listOf().optionalFieldOf("pending", List.of()).forGetter(ledger -> List.copyOf(ledger.pending.values()))
+    ).apply(instance, QuestLedger::new));
+
+    private static final SavedDataType<QuestLedger> TYPE = new SavedDataType<>(
+            PolyQuest.id("ledger"),
+            QuestLedger::new,
+            CODEC,
+            DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
+
     private final Map<UUID, Set<String>> claims = new HashMap<>();
     private final Map<UUID, PendingTransaction> pending = new LinkedHashMap<>();
-    private final EnumMap<QuestModel.Difficulty, Integer> rotationGenerations =
-            new EnumMap<>(QuestModel.Difficulty.class);
+    private final EnumMap<QuestModel.Difficulty, Integer> rotationGenerations = new EnumMap<>(QuestModel.Difficulty.class);
     private LocalDate rotationDate = LocalDate.MIN;
+    private Optional<SavedDataStorage> storage = Optional.empty();
 
-    private QuestLedger(MinecraftServer server, Path path) {
-        this.server = server;
-        this.path = path;
+    QuestLedger() {
         for (QuestModel.Difficulty difficulty : QuestModel.Difficulty.values()) {
             rotationGenerations.put(difficulty, 0);
         }
     }
 
+    private QuestLedger(
+            LocalDate rotationDate, Map<QuestModel.Difficulty, Integer> rotationGenerations,
+            Map<UUID, Set<String>> claims, List<PendingTransaction> pendingTransactions
+    ) {
+        this();
+        this.rotationDate = rotationDate;
+        this.rotationGenerations.putAll(rotationGenerations);
+        claims.forEach((playerId, values) -> this.claims.put(playerId, new HashSet<>(values)));
+        pendingTransactions.forEach(transaction -> pending.put(transaction.id(), transaction));
+    }
+
     public static QuestLedger load(MinecraftServer server) {
-        Path path = server.getWorldPath(LevelResource.ROOT)
-                .resolve("data")
-                .resolve(FILE_NAME);
-        QuestLedger ledger = new QuestLedger(server, path);
-        ledger.read();
+        SavedDataStorage storage = server.getDataStorage();
+        QuestLedger ledger = storage.computeIfAbsent(TYPE);
+        ledger.storage = Optional.of(storage);
         return ledger;
     }
 
@@ -71,58 +99,50 @@ public final class QuestLedger {
         return claims.getOrDefault(playerId, Set.of()).contains(occurrence.persistentKey());
     }
 
-    public PendingTransaction beginClaim(
-            UUID playerId,
-            QuestModel.Occurrence occurrence,
-            List<RewardApi.Definition> rewards) {
+    public PendingTransaction beginClaim(UUID playerId, QuestModel.Occurrence occurrence, List<RewardApi.Definition> rewards) {
         PendingTransaction transaction = new PendingTransaction(
-                UUID.randomUUID(),
-                playerId,
-                occurrence.definition().id().toString(),
-                occurrence.key().persistentKey(),
-                List.copyOf(rewards),
-                0,
-                TransactionState.PREPARED,
-                "");
+                UUID.randomUUID(), playerId, occurrence.definition().id(),
+                occurrence.key().persistentKey(), List.copyOf(rewards),
+                0, TransactionState.PREPARED, ""
+        );
         pending.put(transaction.id(), transaction);
-        save();
+        persistImmediately();
         return transaction;
     }
 
     public void markCostsCommitted(PendingTransaction transaction) {
         transaction.state = TransactionState.COSTS_COMMITTED;
-        save();
+        persistImmediately();
     }
 
     public void advanceReward(PendingTransaction transaction) {
         transaction.nextReward++;
         transaction.state = TransactionState.REWARD_PENDING;
         transaction.lastError = "";
-        save();
+        persistImmediately();
     }
 
     public void markRetryable(PendingTransaction transaction, String message) {
         transaction.state = TransactionState.REWARD_PENDING;
         transaction.lastError = message;
-        save();
+        persistImmediately();
     }
 
     public void markFailed(PendingTransaction transaction, String message) {
         transaction.state = TransactionState.FAILED;
         transaction.lastError = message;
-        save();
+        persistImmediately();
     }
 
     public void cancel(PendingTransaction transaction) {
         pending.remove(transaction.id());
-        save();
+        persistImmediately();
     }
 
     public void complete(PendingTransaction transaction) {
-        claims.computeIfAbsent(transaction.playerId(), ignored -> new HashSet<>())
-                .add(transaction.occurrenceKey());
+        claims.computeIfAbsent(transaction.playerId(), ignored -> new HashSet<>()).add(transaction.occurrenceKey());
         pending.remove(transaction.id());
-        save();
+        persistImmediately();
     }
 
     public List<PendingTransaction> pendingFor(UUID playerId) {
@@ -131,25 +151,24 @@ public final class QuestLedger {
                 .toList();
     }
 
+    public boolean hasPending(UUID playerId, QuestModel.Key occurrence) {
+        String occurrenceKey = occurrence.persistentKey();
+        return pending.values().stream().anyMatch(transaction ->
+                transaction.playerId().equals(playerId)
+                        && transaction.occurrenceKey().equals(occurrenceKey));
+    }
+
     public List<PendingTransaction> pendingTransactions() {
         return List.copyOf(pending.values());
     }
 
-    public void removeQuest(net.minecraft.resources.Identifier questId) {
-        String prefix = questId + "|";
-        claims.values().forEach(values -> values.removeIf(value -> value.startsWith(prefix)));
-        pending.values().removeIf(transaction -> transaction.questId().equals(questId.toString()));
-        save();
-    }
-
     public void resetClaim(UUID playerId, QuestModel.Key occurrence) {
         Set<String> playerClaims = claims.get(playerId);
-        if (playerClaims != null) {
-            playerClaims.remove(occurrence.persistentKey());
+        if (playerClaims != null && playerClaims.remove(occurrence.persistentKey())) {
             if (playerClaims.isEmpty()) {
                 claims.remove(playerId);
             }
-            save();
+            persistImmediately();
         }
     }
 
@@ -159,7 +178,7 @@ public final class QuestLedger {
         }
         rotationDate = date;
         rotationGenerations.replaceAll((difficulty, ignored) -> 0);
-        save();
+        persistImmediately();
     }
 
     public int rotationGeneration(QuestModel.Difficulty difficulty) {
@@ -168,178 +187,51 @@ public final class QuestLedger {
 
     public void incrementRotationGeneration(QuestModel.Difficulty difficulty) {
         rotationGenerations.merge(difficulty, 1, Integer::sum);
-        save();
+        persistImmediately();
     }
 
-    public void save() {
-        JsonObject root = new JsonObject();
-        root.addProperty("rotation_date", rotationDate.toString());
-        JsonObject generations = new JsonObject();
-        rotationGenerations.forEach((difficulty, generation) ->
-                generations.addProperty(difficulty.getSerializedName(), generation));
-        root.add("rotation_generations", generations);
-
-        JsonObject claimObject = new JsonObject();
-        claims.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .forEach(entry -> {
-                    JsonArray values = new JsonArray();
-                    entry.getValue().stream().sorted().forEach(values::add);
-                    claimObject.add(entry.getKey().toString(), values);
-                });
-        root.add("claims", claimObject);
-
-        JsonArray transactions = new JsonArray();
-        pending.values().stream()
-                .sorted(java.util.Comparator.comparing(transaction -> transaction.id().toString()))
-                .map(this::encodeTransaction)
-                .forEach(transactions::add);
-        root.add("pending", transactions);
-
-        try {
-            Files.createDirectories(path.getParent());
-            Path temporary = path.resolveSibling(path.getFileName() + ".tmp");
-            try (Writer writer = Files.newBufferedWriter(temporary)) {
-                GSON.toJson(root, writer);
-            }
-            try {
-                Files.move(temporary, path,
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException exception) {
-                Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } catch (IOException exception) {
-            PolyQuest.LOGGER.error("Could not persist PolyQuest ledger {}", path, exception);
-        }
+    public void flush() {
+        setDirty();
+        storage.ifPresent(SavedDataStorage::saveAndJoin);
     }
 
-    private void read() {
-        if (!Files.isRegularFile(path)) {
-            return;
-        }
-        try (Reader reader = Files.newBufferedReader(path)) {
-            JsonObject root = GSON.fromJson(reader, JsonObject.class);
-            if (root == null) {
-                return;
-            }
-            readRotation(root);
-            readClaims(root);
-            readTransactions(root);
-        } catch (IOException | RuntimeException exception) {
-            PolyQuest.LOGGER.error("Could not load PolyQuest ledger {}; starting empty", path, exception);
-            claims.clear();
-            pending.clear();
-        }
+    /// Marks the ledger dirty and synchronously checkpoints it when attached to world storage.
+    private void persistImmediately() {
+        setDirty();
+        storage.ifPresent(SavedDataStorage::saveAndJoin);
     }
 
-    private void readRotation(JsonObject root) {
-        try {
-            if (root.has("rotation_date")) {
-                rotationDate = LocalDate.parse(root.get("rotation_date").getAsString());
-            }
-        } catch (DateTimeParseException | IllegalStateException exception) {
-            rotationDate = LocalDate.MIN;
+    public enum TransactionState implements StringRepresentable {
+        PREPARED("prepared"),
+        COSTS_COMMITTED("costs_committed"),
+        REWARD_PENDING("reward_pending"),
+        FAILED("failed");
+
+        private static final Codec<TransactionState> CODEC = StringRepresentable.fromEnum(TransactionState::values);
+        private final String serializedName;
+
+        TransactionState(String serializedName) {
+            this.serializedName = serializedName;
         }
-        if (root.has("rotation_generations") && root.get("rotation_generations").isJsonObject()) {
-            JsonObject generations = root.getAsJsonObject("rotation_generations");
-            for (QuestModel.Difficulty difficulty : QuestModel.Difficulty.values()) {
-                if (generations.has(difficulty.getSerializedName())) {
-                    rotationGenerations.put(
-                            difficulty,
-                            Math.max(0, generations.get(difficulty.getSerializedName()).getAsInt()));
-                }
-            }
+
+        @Override
+        public String getSerializedName() {
+            return serializedName;
         }
-    }
-
-    private void readClaims(JsonObject root) {
-        if (!root.has("claims") || !root.get("claims").isJsonObject()) {
-            return;
-        }
-        root.getAsJsonObject("claims").entrySet().forEach(entry -> {
-            try {
-                UUID playerId = UUID.fromString(entry.getKey());
-                Set<String> values = new HashSet<>();
-                entry.getValue().getAsJsonArray().forEach(value -> values.add(value.getAsString()));
-                claims.put(playerId, values);
-            } catch (RuntimeException exception) {
-                PolyQuest.LOGGER.warn("Ignoring malformed PolyQuest claim entry for {}", entry.getKey());
-            }
-        });
-    }
-
-    private void readTransactions(JsonObject root) {
-        if (!root.has("pending") || !root.get("pending").isJsonArray()) {
-            return;
-        }
-        for (JsonElement element : root.getAsJsonArray("pending")) {
-            try {
-                PendingTransaction transaction = decodeTransaction(element.getAsJsonObject());
-                if (transaction != null) {
-                    pending.put(transaction.id(), transaction);
-                }
-            } catch (RuntimeException exception) {
-                PolyQuest.LOGGER.error("Ignoring malformed pending PolyQuest transaction", exception);
-            }
-        }
-    }
-
-    private JsonObject encodeTransaction(PendingTransaction transaction) {
-        JsonObject json = new JsonObject();
-        json.addProperty("id", transaction.id().toString());
-        json.addProperty("player", transaction.playerId().toString());
-        json.addProperty("quest", transaction.questId());
-        json.addProperty("occurrence", transaction.occurrenceKey());
-        json.addProperty("next_reward", transaction.nextReward());
-        json.addProperty("state", transaction.state().name());
-        json.addProperty("last_error", transaction.lastError());
-
-        DynamicOps<JsonElement> ops = server.registryAccess().createSerializationContext(JsonOps.INSTANCE);
-        JsonElement rewards = extract(
-                RewardApi.codec().listOf().encodeStart(ops, transaction.rewards()),
-                "Could not encode pending rewards for " + transaction.id());
-        json.add("rewards", rewards == null ? new JsonArray() : rewards);
-        return json;
-    }
-
-    private PendingTransaction decodeTransaction(JsonObject json) {
-        DynamicOps<JsonElement> ops = server.registryAccess().createSerializationContext(JsonOps.INSTANCE);
-        List<RewardApi.Definition> rewards = extract(
-                RewardApi.codec().listOf().parse(ops, json.get("rewards")),
-                "Could not decode pending rewards");
-        if (rewards == null) {
-            return null;
-        }
-        return new PendingTransaction(
-                UUID.fromString(json.get("id").getAsString()),
-                UUID.fromString(json.get("player").getAsString()),
-                json.get("quest").getAsString(),
-                json.get("occurrence").getAsString(),
-                rewards,
-                json.get("next_reward").getAsInt(),
-                TransactionState.valueOf(json.get("state").getAsString()),
-                json.has("last_error") ? json.get("last_error").getAsString() : "");
-    }
-
-    private static <T> T extract(DataResult<T> result, String context) {
-        AtomicReference<T> value = new AtomicReference<>();
-        result.ifSuccess(value::set);
-        result.ifError(error -> PolyQuest.LOGGER.error("{}: {}", context, error.message()));
-        return value.get();
-    }
-
-    public enum TransactionState {
-        PREPARED,
-        COSTS_COMMITTED,
-        REWARD_PENDING,
-        FAILED
     }
 
     public static final class PendingTransaction {
+        private static final Codec<PendingTransaction> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+                UUIDUtil.STRING_CODEC.fieldOf("id").forGetter(PendingTransaction::id),
+                UUIDUtil.STRING_CODEC.fieldOf("player").forGetter(PendingTransaction::playerId),
+                Identifier.CODEC.fieldOf("quest").forGetter(PendingTransaction::questId),
+                Codec.STRING.fieldOf("occurrence").forGetter(PendingTransaction::occurrenceKey),
+                RewardProgress.CODEC.fieldOf("reward_progress").forGetter(PendingTransaction::rewardProgress)
+        ).apply(instance, PendingTransaction::new));
+
         private final UUID id;
         private final UUID playerId;
-        private final String questId;
+        private final Identifier questId;
         private final String occurrenceKey;
         private final List<RewardApi.Definition> rewards;
         private int nextReward;
@@ -347,14 +239,21 @@ public final class QuestLedger {
         private String lastError;
 
         private PendingTransaction(
-                UUID id,
-                UUID playerId,
-                String questId,
-                String occurrenceKey,
-                List<RewardApi.Definition> rewards,
-                int nextReward,
-                TransactionState state,
-                String lastError) {
+                UUID id, UUID playerId, Identifier questId,
+                String occurrenceKey, RewardProgress rewardProgress
+        ) {
+            this(
+                    id, playerId, questId, occurrenceKey,
+                    rewardProgress.rewards(), rewardProgress.nextReward(),
+                    rewardProgress.state(), rewardProgress.lastError()
+            );
+        }
+
+        private PendingTransaction(
+                UUID id, UUID playerId, Identifier questId,
+                String occurrenceKey, List<RewardApi.Definition> rewards,
+                int nextReward, TransactionState state, String lastError
+        ) {
             this.id = id;
             this.playerId = playerId;
             this.questId = questId;
@@ -362,7 +261,11 @@ public final class QuestLedger {
             this.rewards = List.copyOf(rewards);
             this.nextReward = nextReward;
             this.state = state;
-            this.lastError = lastError == null ? "" : lastError;
+            this.lastError = lastError;
+        }
+
+        private RewardProgress rewardProgress() {
+            return new RewardProgress(rewards, nextReward, state, lastError);
         }
 
         public UUID id() {
@@ -373,7 +276,7 @@ public final class QuestLedger {
             return playerId;
         }
 
-        public String questId() {
+        public Identifier questId() {
             return questId;
         }
 
@@ -395,6 +298,29 @@ public final class QuestLedger {
 
         public String lastError() {
             return lastError;
+        }
+    }
+
+    private record RewardProgress(
+            List<RewardApi.Definition> rewards,
+            int nextReward,
+            TransactionState state,
+            String lastError) {
+        private static final Codec<RewardProgress> CODEC = RecordCodecBuilder.<RewardProgress>create(instance -> instance.group(
+                REWARDS_CODEC.fieldOf("rewards").forGetter(RewardProgress::rewards),
+                NON_NEGATIVE_INT.fieldOf("next_reward").forGetter(RewardProgress::nextReward),
+                TransactionState.CODEC.fieldOf("state").forGetter(RewardProgress::state),
+                Codec.STRING.optionalFieldOf("last_error", "").forGetter(RewardProgress::lastError)
+        ).apply(instance, RewardProgress::new)).validate(RewardProgress::validate);
+
+        private RewardProgress {
+            rewards = List.copyOf(rewards);
+        }
+
+        private static DataResult<RewardProgress> validate(RewardProgress progress) {
+            return progress.nextReward <= progress.rewards.size()
+                    ? DataResult.success(progress)
+                    : DataResult.error(() -> "next_reward exceeds the reward count");
         }
     }
 }

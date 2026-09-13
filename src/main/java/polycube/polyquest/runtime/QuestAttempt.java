@@ -15,7 +15,7 @@ public final class QuestAttempt {
 
     public QuestAttempt(QuestModel.Occurrence occurrence, MinecraftServer server) {
         this.occurrence = occurrence;
-        this.root = ConditionRuntime.create(occurrence.definition().condition(), new ConditionRuntime.CreationContext(server));
+        this.root = ConditionRuntime.create(occurrence.definition().condition(), new ConditionRuntime.CreationContext(server::getTickCount));
         this.createdAtTick = server.getTickCount();
         this.lastUpdatedTick = createdAtTick;
         refreshStatus();
@@ -29,6 +29,7 @@ public final class QuestAttempt {
         return status;
     }
 
+    /// Rebinds display-only data without replacing the condition tree, progress, or occurrence identity.
     public void updatePresentation(QuestModel.Occurrence currentOccurrence) {
         if (!occurrence.key().equals(currentOccurrence.key())) {
             throw new IllegalArgumentException("Cannot replace an attempt with another occurrence");
@@ -71,8 +72,9 @@ public final class QuestAttempt {
         if (status == QuestModel.AttemptStatus.EXHAUSTED) {
             return ConditionRuntime.ClaimPreparation.blocked("Quest has no attempts remaining");
         }
-        return root.prepareClaim(new ConditionRuntime.ClaimContext(
-                context.server(), context.player(), context.serverTick()));
+        ConditionRuntime.ClaimPreparation preparation = root.prepareClaim(new ConditionRuntime.ClaimContext(context.server(), context.player(), context.serverTick()));
+        refreshStatus();
+        return preparation;
     }
 
     public void markPending() {
@@ -83,6 +85,7 @@ public final class QuestAttempt {
         status = QuestModel.AttemptStatus.CLAIMED;
     }
 
+    /// Re-derives readiness after claim compensation instead of blindly forcing an active state.
     public void markActiveAfterFailedClaim() {
         refreshStatus();
     }
@@ -99,9 +102,12 @@ public final class QuestAttempt {
     }
 
     private boolean terminal() {
-        return status == QuestModel.AttemptStatus.CLAIMED || status == QuestModel.AttemptStatus.CLAIM_PENDING;
+        return status == QuestModel.AttemptStatus.CLAIMED
+                || status == QuestModel.AttemptStatus.CLAIM_PENDING
+                || status == QuestModel.AttemptStatus.EXHAUSTED;
     }
 
+    /// Derives non-durable status from the root while preserving durable terminal states.
     private void refreshStatus() {
         if (status == QuestModel.AttemptStatus.CLAIMED || status == QuestModel.AttemptStatus.CLAIM_PENDING) {
             return;

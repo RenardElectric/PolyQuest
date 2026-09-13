@@ -2,6 +2,8 @@ package polycube.polyquest.runtime;
 
 import com.google.gson.JsonObject;
 import java.util.List;
+import java.util.Objects;
+import java.util.function.LongSupplier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import polycube.polyquest.condition.ConditionApi;
@@ -9,14 +11,15 @@ import polycube.polyquest.signal.QuestSignal;
 
 /// Mutable per-player condition state and claim-time operations.
 public final class ConditionRuntime {
-    public record CreationContext(MinecraftServer server) {
+    public record CreationContext(LongSupplier serverTick) {
+        public long currentServerTick() {
+            return serverTick.getAsLong();
+        }
     }
 
-    public record EvaluationContext(MinecraftServer server, long serverTick) {
-    }
+    public record EvaluationContext(MinecraftServer server, long serverTick) {}
 
-    public record ClaimContext(MinecraftServer server, ServerPlayer player, long serverTick) {
-    }
+    public record ClaimContext(MinecraftServer server, ServerPlayer player, long serverTick) {}
 
     public record Update(boolean changed, boolean progressed, boolean completedNow) {
         public static final Update NONE = new Update(false, false, false);
@@ -63,7 +66,6 @@ public final class ConditionRuntime {
     public record ClaimPreparation(boolean ready, List<ClaimOperation> operations, String failure) {
         public ClaimPreparation {
             operations = List.copyOf(operations);
-            failure = failure == null ? "" : failure;
         }
 
         public static ClaimPreparation readyPrep(List<ClaimOperation> operations) {
@@ -88,26 +90,20 @@ public final class ConditionRuntime {
     }
 
     public record CommitResult(boolean success, Runnable rollback, String failure) {
-        public CommitResult {
-            rollback = rollback == null ? () -> { } : rollback;
-            failure = failure == null ? "" : failure;
-        }
-
         public static CommitResult success(Runnable rollback) {
             return new CommitResult(true, rollback, "");
         }
-
         public static CommitResult failure(String reason) {
             return new CommitResult(false, () -> { }, reason);
         }
     }
 
+    /// Dispatches a definition through its registered runtime factory.
+    @SuppressWarnings("unchecked")
     public static Instance create(ConditionApi.Definition definition, CreationContext context) {
-        ConditionApi.Type<ConditionApi.Definition> type =
-                (ConditionApi.Type<ConditionApi.Definition>) definition.type();
+        ConditionApi.Type<ConditionApi.Definition> type = (ConditionApi.Type<ConditionApi.Definition>) definition.type();
         return type.factory().create(definition, context);
     }
 
-    private ConditionRuntime() {
-    }
+    private ConditionRuntime() {}
 }

@@ -10,7 +10,9 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import org.jspecify.annotations.Nullable;
 
 /// Normalized server-thread events consumed by condition instances.
 public sealed interface QuestSignal
@@ -30,7 +32,10 @@ public sealed interface QuestSignal
         }
     }
 
-    record BlockBroken(ServerPlayer player, long serverTick, ServerLevel level, BlockPos position, BlockState state, ItemStack tool) implements QuestSignal {
+    record BlockBroken(
+            ServerPlayer player, long serverTick, ServerLevel level, BlockPos position,
+            BlockState state, @Nullable BlockEntity blockEntity, ItemStack tool
+    ) implements QuestSignal {
         public BlockBroken {
             position = position.immutable();
             tool = tool.copy();

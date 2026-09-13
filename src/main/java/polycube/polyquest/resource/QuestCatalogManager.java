@@ -3,6 +3,7 @@ package polycube.polyquest.resource;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import net.minecraft.resources.Identifier;
@@ -17,8 +18,9 @@ public final class QuestCatalogManager {
         return current;
     }
 
-    public void addListener(Consumer<Update> listener) {
+    public Subscription addListener(Consumer<Update> listener) {
         listeners.add(listener);
+        return () -> listeners.remove(listener);
     }
 
     /// Must be called on the server thread from the reload listener's apply phase.
@@ -27,17 +29,21 @@ public final class QuestCatalogManager {
         Diff diff = Diff.between(previous, candidate);
         current = candidate;
         Update update = new Update(previous, candidate, diff);
-        listeners.forEach(listener -> listener.accept(update));
+        List.copyOf(listeners).forEach(listener -> listener.accept(update));
     }
 
     public record Update(QuestModel.Catalog previous, QuestModel.Catalog current, Diff diff) {}
 
+    @FunctionalInterface
+    public interface Subscription extends AutoCloseable {
+        @Override
+        void close();
+    }
+
     public record Diff(
-            Set<Identifier> added,
-            Set<Identifier> removed,
-            Set<Identifier> behaviorChanged,
-            Set<Identifier> presentationChanged,
-            Set<Identifier> unchanged) {
+            Set<Identifier> added, Set<Identifier> removed, Set<Identifier> behaviorChanged,
+            Set<Identifier> presentationChanged, Set<Identifier> unchanged
+    ) {
         public Diff {
             added = Set.copyOf(added);
             removed = Set.copyOf(removed);
@@ -58,8 +64,8 @@ public final class QuestCatalogManager {
             Set<Identifier> unchanged = new LinkedHashSet<>();
 
             oldIds.stream().filter(newIds::contains).sorted().forEach(id -> {
-                QuestModel.Definition oldQuest = oldCatalog.quests().get(id);
-                QuestModel.Definition newQuest = newCatalog.quests().get(id);
+                QuestModel.Definition oldQuest = Objects.requireNonNull(oldCatalog.quests().get(id));
+                QuestModel.Definition newQuest = Objects.requireNonNull(newCatalog.quests().get(id));
                 if (!oldQuest.behaviorHash().equals(newQuest.behaviorHash())) {
                     behaviorChanged.add(id);
                 } else if (!oldQuest.presentationHash().equals(newQuest.presentationHash())) {

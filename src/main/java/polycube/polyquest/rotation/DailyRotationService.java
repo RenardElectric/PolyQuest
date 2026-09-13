@@ -7,8 +7,8 @@ import java.time.ZonedDateTime;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SplittableRandom;
-import net.minecraft.server.MinecraftServer;
 import polycube.polyquest.config.QuestConfig;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.persistence.QuestLedger;
@@ -16,8 +16,7 @@ import polycube.polyquest.persistence.QuestLedger;
 /// Deterministically selects one global quest per difficulty and calendar date.
 public final class DailyRotationService {
     private final QuestConfig config;
-    private QuestModel.DailyAssignment assignment = new QuestModel.DailyAssignment(
-            LocalDate.MIN, Map.of());
+    private QuestModel.DailyAssignment assignment = new QuestModel.DailyAssignment(LocalDate.MIN, Map.of());
 
     public DailyRotationService(QuestConfig config) {
         this.config = config;
@@ -27,19 +26,16 @@ public final class DailyRotationService {
         return assignment;
     }
 
-    public boolean refresh(
-            MinecraftServer server,
-            QuestModel.Catalog catalog,
-            QuestLedger ledger) {
-        ZoneId zone = config.zoneId();
+    /// Rebuilds today's slots while preserving valid same-generation selections across reloads.
+    public boolean refresh(QuestModel.Catalog catalog, QuestLedger ledger) {
+        ZoneId zone = config.timeZone();
         LocalDate today = LocalDate.now(zone);
         boolean dateChanged = !today.equals(assignment.date());
         if (dateChanged) {
             ledger.beginRotation(today);
         }
 
-        EnumMap<QuestModel.Difficulty, QuestModel.Occurrence> slots =
-                new EnumMap<>(QuestModel.Difficulty.class);
+        EnumMap<QuestModel.Difficulty, QuestModel.Occurrence> slots = new EnumMap<>(QuestModel.Difficulty.class);
         ZonedDateTime start = today.atStartOfDay(zone);
         Instant availableFrom = start.toInstant();
         Instant availableUntil = start.plusDays(1).toInstant();
@@ -56,10 +52,8 @@ public final class DailyRotationService {
                         return candidates.get(new SplittableRandom(seed).nextInt(candidates.size()));
                     });
             QuestModel.DailyScope scope = new QuestModel.DailyScope(today, difficulty, generation);
-            QuestModel.Key key = new QuestModel.Key(
-                    selected.id(), selected.behaviorHash(), scope);
-            slots.put(difficulty, new QuestModel.Occurrence(
-                    key, selected, availableFrom, java.util.Optional.of(availableUntil)));
+            QuestModel.Key key = new QuestModel.Key(selected.id(), selected.behaviorHash(), scope);
+            slots.put(difficulty, new QuestModel.Occurrence(key, selected, availableFrom, java.util.Optional.of(availableUntil)));
         }
 
         QuestModel.DailyAssignment next = new QuestModel.DailyAssignment(today, slots);
@@ -68,38 +62,34 @@ public final class DailyRotationService {
         return changed;
     }
 
-    public boolean reroll(
-            QuestModel.Difficulty difficulty,
-            MinecraftServer server,
-            QuestModel.Catalog catalog,
-            QuestLedger ledger) {
+    public boolean reroll(QuestModel.Difficulty difficulty, QuestModel.Catalog catalog, QuestLedger ledger) {
+        if (catalog.daily(difficulty).isEmpty()) {
+            return false;
+        }
         ledger.incrementRotationGeneration(difficulty);
-        return refresh(server, catalog, ledger);
+        return refresh(catalog, ledger);
     }
 
-    private java.util.Optional<QuestModel.Definition> preservedSelection(
-            LocalDate date,
-            QuestModel.Difficulty difficulty,
-            int generation,
-            QuestModel.Catalog catalog) {
-        QuestModel.Occurrence previous = assignment.slots().get(difficulty);
-        if (previous == null
-                || !(previous.key().scope() instanceof QuestModel.DailyScope previousScope)
+    /// Reuses a selection when it remains eligible for the same date and reroll generation.
+    private Optional<QuestModel.Definition> preservedSelection(
+            LocalDate date, QuestModel.Difficulty difficulty,
+            int generation, QuestModel.Catalog catalog
+    ) {
+        Optional<QuestModel.Occurrence> previous = Optional.ofNullable(assignment.slots().get(difficulty));
+        if (previous.isEmpty()
+                || !(previous.get().key().scope() instanceof QuestModel.DailyScope previousScope)
                 || !previousScope.date().equals(date)
                 || previousScope.generation() != generation) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
-        QuestModel.Definition currentDefinition = catalog.quests().get(previous.definition().id());
-        if (currentDefinition == null
-                || currentDefinition.availability() != QuestModel.Availability.DAILY
-                || currentDefinition.difficulty().orElse(null) != difficulty) {
-            return java.util.Optional.empty();
-        }
-        return java.util.Optional.of(currentDefinition);
+        return Optional.ofNullable(catalog.quests().get(previous.get().definition().id()))
+                .filter(definition -> definition.availability() == QuestModel.Availability.DAILY)
+                .filter(definition -> definition.difficulty().filter(difficulty::equals).isPresent());
     }
 
+    /// Derives a stable independent seed for one date, difficulty, and reroll generation.
     private long mixedSeed(LocalDate date, QuestModel.Difficulty difficulty, int generation) {
-        long value = config.dailySeed;
+        long value = config.dailySeed();
         value ^= date.toEpochDay() * 0x9E3779B97F4A7C15L;
         value = Long.rotateLeft(value, 21) ^ (difficulty.ordinal() * 0xC2B2AE3D27D4EB4FL);
         value = Long.rotateLeft(value, 17) ^ (generation * 0x165667B19E3779F9L);
@@ -109,20 +99,14 @@ public final class DailyRotationService {
         return value;
     }
 
-    private static boolean sameOccurrences(
-            QuestModel.DailyAssignment first,
-            QuestModel.DailyAssignment second) {
+    private static boolean sameOccurrences(QuestModel.DailyAssignment first, QuestModel.DailyAssignment second) {
         if (!first.date().equals(second.date()) || first.slots().size() != second.slots().size()) {
             return false;
         }
         for (QuestModel.Difficulty difficulty : QuestModel.Difficulty.values()) {
-            QuestModel.Occurrence a = first.slots().get(difficulty);
-            QuestModel.Occurrence b = second.slots().get(difficulty);
-            if (a == null || b == null) {
-                if (a != b) {
-                    return false;
-                }
-            } else if (!a.key().equals(b.key())) {
+            Optional<QuestModel.Key> firstKey = Optional.ofNullable(first.slots().get(difficulty)).map(QuestModel.Occurrence::key);
+            Optional<QuestModel.Key> secondKey = Optional.ofNullable(second.slots().get(difficulty)).map(QuestModel.Occurrence::key);
+            if (!firstKey.equals(secondKey)) {
                 return false;
             }
         }

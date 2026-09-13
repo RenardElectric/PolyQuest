@@ -1,20 +1,23 @@
 package polycube.polyquest.resource;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.ItemStackTemplate;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.condition.CompositeConditions;
 import polycube.polyquest.condition.ConditionApi;
 import polycube.polyquest.model.QuestModel;
+import polycube.polyquest.reward.BuiltInRewards;
 import polycube.polyquest.reward.RewardApi;
 
 /// Semantic validation performed after codec decoding and template expansion.
 public final class QuestDefinitionValidator {
-    public List<String> validate(
-            QuestModel.Definition quest,
-            Map<Identifier, RewardApi.Profile> profiles) {
+    public List<String> validate(QuestModel.Definition quest, Map<Identifier, RewardApi.Profile> profiles) {
         List<String> errors = new ArrayList<>();
         String prefix = "Quest '" + quest.id() + "': ";
 
@@ -27,8 +30,7 @@ public final class QuestDefinitionValidator {
         if (quest.availability() == QuestModel.Availability.UNIQUE && quest.difficulty().isPresent()) {
             errors.add(prefix + "unique quests must not specify a difficulty");
         }
-        if (quest.rewards().profile().isPresent()
-                && !profiles.containsKey(quest.rewards().profile().get())) {
+        if (quest.rewards().profile().isPresent() && !profiles.containsKey(quest.rewards().profile().get())) {
             errors.add(prefix + "unknown reward profile '" + quest.rewards().profile().get() + "'");
         }
         if (quest.rewards().profile().isPresent() && !quest.rewards().inlineRewards().isEmpty()) {
@@ -37,86 +39,178 @@ public final class QuestDefinitionValidator {
         if (quest.rewards().profile().isEmpty() && quest.rewards().inlineRewards().isEmpty()) {
             errors.add(prefix + "at least one reward is required");
         }
+        for (int index = 0; index < quest.rewards().inlineRewards().size(); index++) {
+            validateReward(quest.rewards().inlineRewards().get(index), prefix + "rewards[" + index + "]", errors);
+        }
 
         validateCondition(quest.condition(), prefix + "condition", errors);
         return errors;
     }
 
-    private void validateCondition(
-            ConditionApi.Definition definition,
-            String path,
-            List<String> errors) {
-        if (definition instanceof BuiltInConditions.ConsumeItems value && value.count() <= 0) {
-            errors.add(path + ": count must be positive");
-        } else if (definition instanceof BuiltInConditions.FishItem value && value.count() <= 0) {
-            errors.add(path + ": count must be positive");
-        } else if (definition instanceof BuiltInConditions.KillEntity value && value.count() <= 0) {
-            errors.add(path + ": count must be positive");
-        } else if (definition instanceof BuiltInConditions.BreakBlock value && value.count() <= 0) {
-            errors.add(path + ": count must be positive");
-        } else if (definition instanceof BuiltInConditions.VisitLocation value
-                && value.continuousTicks() <= 0) {
-            errors.add(path + ": continuous_ticks must be positive");
-        } else if (definition instanceof BuiltInConditions.ExplicitSignal value && value.count() <= 0) {
-            errors.add(path + ": count must be positive");
-        } else if (definition instanceof BuiltInConditions.UninterruptedFall value
-                && value.minimumDistance() < 0.0) {
-            errors.add(path + ": minimum_distance cannot be negative");
-        } else if (definition instanceof CompositeConditions.AllOf value) {
-            validateChildren(value.children(), path, true, errors);
-        } else if (definition instanceof CompositeConditions.AnyOf value) {
-            validateChildren(value.children(), path, true, errors);
-        } else if (definition instanceof CompositeConditions.Sequence value) {
-            validateChildren(value.children(), path, true, errors);
-        } else if (definition instanceof CompositeConditions.NOfM value) {
-            validateChildren(value.children(), path, true, errors);
-            if (value.required() <= 0 || value.required() > value.children().size()) {
-                errors.add(path + ": required must be between 1 and the number of children");
+    public List<String> validate(RewardApi.Profile profile) {
+        List<String> errors = new ArrayList<>();
+        if (profile.rewards().isEmpty()) {
+            errors.add("Reward profile '" + profile.id() + "' must contain at least one reward");
+        }
+        for (int index = 0; index < profile.rewards().size(); index++) {
+            validateReward(profile.rewards().get(index), "Reward profile '" + profile.id() + "'.rewards[" + index + "]", errors);
+        }
+        return errors;
+    }
+
+    private void validateReward(RewardApi.Definition definition, String path, List<String> errors) {
+        switch (definition) {
+            case BuiltInRewards.Money(BigDecimal amount) when amount.signum() <= 0 -> errors.add(path + ": amount must be positive");
+            case BuiltInRewards.Item(ItemStackTemplate stackTemplate) when stackTemplate.count() <= 0 -> errors.add(path + ": stack cannot be empty");
+            case BuiltInRewards.Experience(int points) when points <= 0 -> errors.add(path + ": points must be positive");
+            case BuiltInRewards.ServerCommands(List<String> commands1) -> {
+                if (commands1.isEmpty()) {
+                    errors.add(path + ": at least one command is required");
+                }
+                for (int index = 0; index < commands1.size(); index++) {
+                    if (commands1.get(index).isBlank()) {
+                        errors.add(path + ".commands[" + index + "]: command cannot be blank");
+                    }
+                }
             }
-        } else if (definition instanceof CompositeConditions.Repeat value) {
-            if (value.times() <= 0) {
-                errors.add(path + ": times must be positive");
+            default -> {
             }
-            validateCondition(value.child(), path + ".child", errors);
-        } else if (definition instanceof CompositeConditions.OptionalChild value) {
-            validateCondition(value.child(), path + ".child", errors);
-        } else if (definition instanceof CompositeConditions.Choice value) {
-            if (value.branches().isEmpty()) {
-                errors.add(path + ": at least one branch is required");
-            }
-            for (int index = 0; index < value.branches().size(); index++) {
-                validateCondition(
-                        value.branches().get(index).condition(),
-                        path + ".branches[" + index + "]",
-                        errors);
-            }
-        } else if (definition instanceof CompositeConditions.TimeWindow value) {
-            if (value.durationTicks() <= 0L) {
-                errors.add(path + ": duration_ticks must be positive");
-            }
-            if (value.maxAttempts() < 0) {
-                errors.add(path + ": max_attempts cannot be negative");
-            }
-            if (value.startPolicy() == CompositeConditions.StartPolicy.START_CONDITION
-                    && value.startCondition().isEmpty()) {
-                errors.add(path + ": start_condition is required for start_policy=start_condition");
-            }
-            validateCondition(value.child(), path + ".child", errors);
-            value.startCondition().ifPresent(start ->
-                    validateCondition(start, path + ".start_condition", errors));
         }
     }
 
-    private void validateChildren(
-            List<ConditionApi.Definition> children,
-            String path,
-            boolean requireChildren,
-            List<String> errors) {
-        if (requireChildren && children.isEmpty()) {
-            errors.add(path + ": at least one child is required");
+    private void validateCondition(ConditionApi.Definition definition, String path, List<String> errors) {
+        switch (definition) {
+            case BuiltInConditions.ConsumeItems value when value.count() <= 0 -> errors.add(path + ": count must be positive");
+            case BuiltInConditions.FishItem value when value.count() <= 0 -> errors.add(path + ": count must be positive");
+            case BuiltInConditions.KillEntity value when value.count() <= 0 -> errors.add(path + ": count must be positive");
+            case BuiltInConditions.BreakBlock value when value.count() <= 0 -> errors.add(path + ": count must be positive");
+            case BuiltInConditions.VisitLocation value when value.continuousTicks() <= 0 -> errors.add(path + ": continuous_ticks must be positive");
+            case BuiltInConditions.ExplicitSignal value when value.count() <= 0 -> errors.add(path + ": count must be positive");
+            case BuiltInConditions.UninterruptedFall value -> {
+                if (!Double.isFinite(value.minimumDistance()) || value.minimumDistance() < 0.0) {
+                    errors.add(path + ": minimum_distance must be a finite non-negative number");
+                }
+                if (!Double.isFinite(value.rules().teleportThreshold()) || value.rules().teleportThreshold() <= 0.0) {
+                    errors.add(path + ": rules.teleport_threshold must be a finite positive number");
+                }
+            }
+            case CompositeConditions.AllOf value -> validateChildren(value.children(), path, true, errors);
+            case CompositeConditions.AnyOf value -> validateChildren(value.children(), path, true, errors);
+            case CompositeConditions.Sequence value -> {
+                validateChildren(value.children(), path, true, errors);
+                for (int index = 0; index + 1 < value.children().size(); index++) {
+                    if (!canCompleteFromSignals(value.children().get(index))) {
+                        errors.add(path + ".children[" + index + "]: a claim-time condition can only be the final sequence step");
+                    }
+                }
+            }
+            case CompositeConditions.NOfM value -> {
+                validateChildren(value.children(), path, true, errors);
+                if (value.required() <= 0 || value.required() > value.children().size()) {
+                    errors.add(path + ": required must be between 1 and the number of children");
+                }
+            }
+            case CompositeConditions.Repeat value -> {
+                if (value.times() <= 0) errors.add(path + ": times must be positive");
+                if (!canCompleteFromSignals(value.child())) errors.add(path + ": repeat cannot contain a claim-time-only condition");
+                validateCondition(value.child(), path + ".child", errors);
+            }
+            case CompositeConditions.OptionalChild value -> {
+                if (containsClaimCost(value.child())) errors.add(path + ": optional conditions cannot contain claim-time costs");
+                validateCondition(value.child(), path + ".child", errors);
+            }
+            case CompositeConditions.Choice value -> {
+                if (value.branches().isEmpty()) errors.add(path + ": at least one branch is required");
+                Set<String> names = new HashSet<>();
+                for (int index = 0; index < value.branches().size(); index++) {
+                    String name = value.branches().get(index).name();
+                    if (name.isBlank()) {
+                        errors.add(path + ".branches[" + index + "]: name cannot be blank");
+                    } else if (!names.add(name)) {
+                        errors.add(path + ".branches[" + index + "]: duplicate branch name '" + name + "'");
+                    }
+                    validateCondition(value.branches().get(index).condition(), path + ".branches[" + index + "]", errors);
+                }
+            }
+            case CompositeConditions.TimeWindow value -> {
+                if (value.durationTicks() <= 0L) errors.add(path + ": duration_ticks must be positive");
+                if (value.maxAttempts() < 0) errors.add(path + ": max_attempts cannot be negative");
+                if (value.startPolicy() == CompositeConditions.StartPolicy.START_CONDITION && value.startCondition().isEmpty()) {
+                    errors.add(path + ": start_condition is required for start_policy=start_condition");
+                }
+                if (value.startPolicy() != CompositeConditions.StartPolicy.START_CONDITION && value.startCondition().isPresent()) {
+                    errors.add(path + ": start_condition is only used with start_policy=start_condition");
+                }
+                if (value.startPolicy() == CompositeConditions.StartPolicy.START_CONDITION
+                        && value.startCondition().isPresent()
+                        && !canCompleteFromSignals(value.startCondition().get())) {
+                    errors.add(path + ": start_condition must be completable from quest signals");
+                }
+                if (value.startPolicy() == CompositeConditions.StartPolicy.FIRST_PROGRESS && !canProgressFromSignals(value.child())) {
+                    errors.add(path + ": first_progress requires a child that can receive event progress");
+                }
+                validateCondition(value.child(), path + ".child", errors);
+                value.startCondition().ifPresent(start -> validateCondition(start, path + ".start_condition", errors));
+            }
+            default -> {
+            }
         }
+    }
+
+    private void validateChildren(List<ConditionApi.Definition> children, String path, boolean requireChildren, List<String> errors) {
+        if (requireChildren && children.isEmpty()) errors.add(path + ": at least one child is required");
         for (int index = 0; index < children.size(); index++) {
             validateCondition(children.get(index), path + ".children[" + index + "]", errors);
         }
+    }
+
+    /// Checks whether a condition tree can finish without a claim-time-only operation.
+    private boolean canCompleteFromSignals(ConditionApi.Definition definition) {
+        return switch (definition) {
+            case BuiltInConditions.ConsumeItems _ -> false;
+            case CompositeConditions.AllOf(List<ConditionApi.Definition> children) -> children.stream().allMatch(this::canCompleteFromSignals);
+            case CompositeConditions.AnyOf(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::canCompleteFromSignals);
+            case CompositeConditions.NOfM(int required, List<ConditionApi.Definition> children) -> children.stream().filter(this::canCompleteFromSignals).count() >= required;
+            case CompositeConditions.Repeat value -> canCompleteFromSignals(value.child());
+            case CompositeConditions.Sequence(List<ConditionApi.Definition> children) -> children.stream().allMatch(this::canCompleteFromSignals);
+            case CompositeConditions.TimeWindow value -> canCompleteFromSignals(value.child());
+            case CompositeConditions.Choice(List<CompositeConditions.Branch> branches) -> branches.stream().anyMatch(branch -> canCompleteFromSignals(branch.condition()));
+            default -> true;
+        };
+    }
+
+    /// Checks whether a signal can produce the first meaningful progress in this tree.
+    private boolean canProgressFromSignals(ConditionApi.Definition definition) {
+        return switch (definition) {
+            case BuiltInConditions.ConsumeItems _ -> false;
+            case CompositeConditions.AllOf(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::canProgressFromSignals);
+            case CompositeConditions.AnyOf(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::canProgressFromSignals);
+            case CompositeConditions.NOfM value -> value.children().stream().anyMatch(this::canProgressFromSignals);
+            case CompositeConditions.Repeat value -> canProgressFromSignals(value.child());
+            case CompositeConditions.Sequence(List<ConditionApi.Definition> children) -> !children.isEmpty() && canProgressFromSignals(children.getFirst());
+            case CompositeConditions.TimeWindow value ->
+                    value.startPolicy() == CompositeConditions.StartPolicy.START_CONDITION
+                            ? value.startCondition().map(this::canProgressFromSignals).orElse(false)
+                            : canProgressFromSignals(value.child());
+            case CompositeConditions.OptionalChild(ConditionApi.Definition child) -> canProgressFromSignals(child);
+            case CompositeConditions.Choice(List<CompositeConditions.Branch> branches) -> branches.stream().anyMatch(branch -> canProgressFromSignals(branch.condition()));
+            default -> true;
+        };
+    }
+
+    /// Finds item-consumption costs anywhere below a composite condition.
+    private boolean containsClaimCost(ConditionApi.Definition definition) {
+        return switch (definition) {
+            case BuiltInConditions.ConsumeItems _ -> true;
+            case CompositeConditions.AllOf(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::containsClaimCost);
+            case CompositeConditions.AnyOf(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::containsClaimCost);
+            case CompositeConditions.NOfM value -> value.children().stream().anyMatch(this::containsClaimCost);
+            case CompositeConditions.Sequence(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::containsClaimCost);
+            case CompositeConditions.Repeat value -> containsClaimCost(value.child());
+            case CompositeConditions.TimeWindow value -> containsClaimCost(value.child()) || value.startCondition().map(this::containsClaimCost).orElse(false);
+            case CompositeConditions.OptionalChild(ConditionApi.Definition child) -> containsClaimCost(child);
+            case CompositeConditions.Choice(List<CompositeConditions.Branch> branches) -> branches.stream().anyMatch(branch -> containsClaimCost(branch.condition()));
+            default -> false;
+        };
     }
 }

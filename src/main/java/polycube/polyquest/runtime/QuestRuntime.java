@@ -3,9 +3,10 @@ package polycube.polyquest.runtime;
 import java.util.Optional;
 import java.util.function.Consumer;
 import net.minecraft.server.MinecraftServer;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.config.QuestConfig;
+import polycube.polyquest.model.QuestModel;
 
 /// Process-local holder for the one integrated server's quest manager.
 public final class QuestRuntime {
@@ -27,10 +28,12 @@ public final class QuestRuntime {
         PolyQuest.LOGGER.info("PolyQuest runtime started with {} quest definitions", PolyQuest.catalogs().current().quests().size());
     }
 
+    /// Shuts down only the matching server runtime and clears its published catalog.
     public static void stop(MinecraftServer server) {
         if (manager != null && manager.server() == server) {
             manager.shutdown();
             manager = null;
+            PolyQuest.catalogs().apply(QuestModel.Catalog.EMPTY);
         }
     }
 

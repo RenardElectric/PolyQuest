@@ -19,16 +19,7 @@ import polycube.polyquest.signal.QuestSignal;
 @Mixin(FishingRodHookedTrigger.class)
 abstract class FishingRodHookedTriggerMixin {
     @Inject(method = "trigger", at = @At("HEAD"))
-    private void polyquest$onFishingResult(
-            ServerPlayer player,
-            ItemStack rod,
-            FishingHook hook,
-            Collection<ItemStack> items,
-            CallbackInfo callback) {
-        QuestRuntime.ifPresent(manager -> manager.signal(new QuestSignal.Fishing(
-                player,
-                player.level().getServer().getTickCount(),
-                hook,
-                List.copyOf(items))));
+    private void polyquest$onFishingResult(ServerPlayer player, ItemStack rod, FishingHook hook, Collection<ItemStack> items, CallbackInfo callback) {
+        QuestRuntime.ifPresent(manager -> manager.signal(new QuestSignal.Fishing(player, player.level().getServer().getTickCount(), hook, List.copyOf(items))));
     }
 }

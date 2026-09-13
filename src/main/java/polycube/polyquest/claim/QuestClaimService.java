@@ -1,41 +1,39 @@
 package polycube.polyquest.claim;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.phys.Vec3;
-import polycube.polyquest.config.QuestConfig;
+import polycube.polyquest.PolyQuest;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.persistence.QuestLedger;
+import polycube.polyquest.resource.QuestCatalogManager;
 import polycube.polyquest.reward.RewardApi;
 import polycube.polyquest.runtime.ConditionRuntime;
 import polycube.polyquest.runtime.QuestAttempt;
 import polycube.polyquest.runtime.QuestEngine;
 
-/// Validates a claim, commits condition costs, and grants an idempotency-keyed reward bundle.
+/// Validates a claim, commits condition costs, and grants a durably tracked reward bundle.
 public final class QuestClaimService {
     private final MinecraftServer server;
-    private final QuestConfig config;
     private final QuestEngine engine;
     private final QuestLedger ledger;
+    private final QuestCatalogManager catalogs;
 
     public QuestClaimService(
-            MinecraftServer server,
-            QuestConfig config,
-            QuestEngine engine,
-            QuestLedger ledger) {
+            MinecraftServer server, QuestEngine engine,
+            QuestLedger ledger, QuestCatalogManager catalogs
+    ) {
         this.server = server;
-        this.config = config;
         this.engine = engine;
         this.ledger = ledger;
+        this.catalogs = catalogs;
     }
 
+    /// Runs the normal claim transaction and checkpoints each stage for safe reward retries.
     public ClaimResult claim(ServerPlayer player, Identifier questId) {
         Optional<QuestModel.Occurrence> occurrenceResult =
                 engine.findOccurrence(player.getUUID(), questId);
@@ -45,9 +43,6 @@ public final class QuestClaimService {
         QuestModel.Occurrence occurrence = occurrenceResult.get();
         if (ledger.isClaimed(player.getUUID(), occurrence.key())) {
             return ClaimResult.failure("You have already claimed this quest");
-        }
-        if (!isAtQuestGiver(player)) {
-            return ClaimResult.failure("Return to the world spawn quest giver to claim this quest");
         }
 
         Optional<QuestLedger.PendingTransaction> existing = ledger.pendingFor(player.getUUID()).stream()
@@ -76,12 +71,10 @@ public final class QuestClaimService {
             }
         }
 
-        QuestLedger.PendingTransaction transaction = ledger.beginClaim(
-                player.getUUID(), occurrence, rewards);
+        QuestLedger.PendingTransaction transaction = ledger.beginClaim(player.getUUID(), occurrence, rewards);
         List<Runnable> rollbacks = new ArrayList<>();
         for (ConditionRuntime.ClaimOperation operation : preparation.operations()) {
-            ConditionRuntime.CommitResult result = operation.commit(new ConditionRuntime.ClaimContext(
-                    server, player, server.getTickCount()));
+            ConditionRuntime.CommitResult result = operation.commit(new ConditionRuntime.ClaimContext(server, player, server.getTickCount()));
             if (!result.success()) {
                 runRollbacks(rollbacks);
                 ledger.cancel(transaction);
@@ -104,8 +97,8 @@ public final class QuestClaimService {
         return rewardResult;
     }
 
-    /// Administrator path that grants the configured rewards without objective costs
-    /// or the spawn-distance requirement. The normal durable transaction path is retained.
+    /// Administrator path that grants configured rewards without objective costs.
+    /// The normal durable transaction path is retained.
     public ClaimResult forceClaim(ServerPlayer player, Identifier questId) {
         Optional<QuestModel.Occurrence> occurrenceResult =
                 engine.findOccurrence(player.getUUID(), questId);
@@ -138,6 +131,7 @@ public final class QuestClaimService {
         return result;
     }
 
+    /// Resumes a cost-committed reward transaction and cancels ambiguous prepared transactions.
     public ClaimResult retry(QuestLedger.PendingTransaction transaction, ServerPlayer player) {
         if (!transaction.playerId().equals(player.getUUID())) {
             return ClaimResult.failure("Transaction belongs to another player");
@@ -153,13 +147,14 @@ public final class QuestClaimService {
         }
         ClaimResult result = grantRemaining(transaction, player);
         if (result.state() == ClaimState.SUCCESS) {
-            engine.findOccurrence(player.getUUID(), Identifier.parse(transaction.questId()))
+            engine.findOccurrence(player.getUUID(), transaction.questId())
                     .flatMap(occurrence -> engine.existingAttempt(player.getUUID(), occurrence.key()))
                     .ifPresent(QuestAttempt::markClaimed);
         }
         return result;
     }
 
+    /// Retries a player's pending rewards, optionally reopening administrator-reviewed failures.
     public List<ClaimResult> retryPending(ServerPlayer player, boolean includeFailed) {
         List<ClaimResult> results = new ArrayList<>();
         for (QuestLedger.PendingTransaction transaction : ledger.pendingFor(player.getUUID())) {
@@ -174,42 +169,41 @@ public final class QuestClaimService {
         return List.copyOf(results);
     }
 
-    public boolean isAtQuestGiver(ServerPlayer player) {
-        if (config.claimRadius <= 0.0) {
-            return true;
-        }
-        if (player.level() != server.overworld()) {
-            return false;
-        }
-        BlockPos spawn = server.overworld().getRespawnData().pos();
-        return player.position().distanceToSqr(Vec3.atCenterOf(spawn))
-                <= config.claimRadius * config.claimRadius;
-    }
-
     private List<RewardApi.Definition> resolveRewards(QuestModel.Definition quest) {
         if (quest.rewards().profile().isPresent()) {
-            RewardApi.Profile profile = polycube.polyquest.PolyQuest.catalogs()
-                    .current()
-                    .rewardProfiles()
-                    .get(quest.rewards().profile().get());
-            return profile == null ? List.of() : profile.rewards();
+            return Optional.ofNullable(catalogs.current()
+                            .rewardProfiles()
+                            .get(quest.rewards().profile().get()))
+                    .map(RewardApi.Profile::rewards)
+                    .orElse(List.of());
         }
         return quest.rewards().inlineRewards();
     }
 
+    /// Grants rewards from the durable cursor and checkpoints after every successful grant.
     private ClaimResult grantRemaining(
             QuestLedger.PendingTransaction transaction,
             ServerPlayer onlinePlayer) {
         while (transaction.nextReward() < transaction.rewards().size()) {
             int rewardIndex = transaction.nextReward();
             RewardApi.Definition reward = transaction.rewards().get(rewardIndex);
-            RewardApi.GrantResult grant = RewardApi.grant(
-                    reward,
-                    new RewardApi.Context(
-                            server,
-                            transaction.playerId(),
-                            onlinePlayer,
-                            transaction.id() + ":" + rewardIndex));
+            RewardApi.GrantResult grant;
+            try {
+                grant = RewardApi.grant(
+                        reward,
+                        new RewardApi.Context(
+                                server,
+                                transaction.playerId(),
+                                onlinePlayer,
+                                transaction.id() + ":" + rewardIndex));
+            } catch (RuntimeException exception) {
+                String message = "Reward threw an exception; transaction requires administrator review";
+                PolyQuest.LOGGER.error(
+                        "Reward {} failed unexpectedly in quest transaction {}",
+                        reward.type().id(), transaction.id(), exception);
+                ledger.markFailed(transaction, message);
+                return new ClaimResult(ClaimState.FAILURE, message);
+            }
             if (grant.state() == RewardApi.GrantResult.State.RETRY_LATER) {
                 ledger.markRetryable(transaction, grant.message());
                 return new ClaimResult(ClaimState.PENDING, grant.message());
@@ -224,9 +218,15 @@ public final class QuestClaimService {
         return new ClaimResult(ClaimState.SUCCESS, "Quest claimed successfully");
     }
 
+    /// Runs claim-cost compensations in reverse commit order without hiding later rollbacks.
     private static void runRollbacks(List<Runnable> rollbacks) {
-        Collections.reverse(rollbacks);
-        rollbacks.forEach(Runnable::run);
+        for (int index = rollbacks.size() - 1; index >= 0; index--) {
+            try {
+                rollbacks.get(index).run();
+            } catch (RuntimeException exception) {
+                PolyQuest.LOGGER.error("Quest claim rollback failed", exception);
+            }
+        }
     }
 
     public enum ClaimState {

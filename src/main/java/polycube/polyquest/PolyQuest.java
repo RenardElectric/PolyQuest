@@ -1,7 +1,6 @@
 package polycube.polyquest;
 
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.resource.v1.DataResourceLoader;
 import net.minecraft.resources.Identifier;
@@ -14,8 +13,6 @@ import polycube.polyquest.integration.FabricQuestEvents;
 import polycube.polyquest.integration.QuestCommands;
 import polycube.polyquest.resource.QuestCatalogManager;
 import polycube.polyquest.resource.QuestReloadListener;
-import polycube.polyquest.resource.QuestResourceCompiler;
-import polycube.polyquest.resource.QuestResourceLoader;
 import polycube.polyquest.reward.BuiltInRewards;
 import polycube.polyquest.runtime.QuestRuntime;
 
@@ -40,11 +37,7 @@ public final class PolyQuest implements ModInitializer {
 
         DataResourceLoader.get().registerReloadListener(
                 id("quests"),
-                registries -> new QuestReloadListener(
-                        registries,
-                        new QuestResourceLoader(),
-                        new QuestResourceCompiler(),
-                        CATALOGS));
+                registries -> new QuestReloadListener(registries, CATALOGS));
 
         FabricQuestEvents.register();
         QuestCommands.register();

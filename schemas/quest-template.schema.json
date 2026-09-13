@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "quest-template.schema.json",
+  "title": "PolyQuest quest-template resource",
+  "description": "A reusable quest prototype. Store under data/<namespace>/quest_templates/**/*.json.",
+  "type": "object",
+  "required": ["prototype"],
+  "properties": {
+    "parameters": {
+      "type": "array",
+      "description": "Unique parameter names accepted by this template.",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "\\S" },
+      "default": []
+    },
+    "prototype": {
+      "type": "object",
+      "description": "A quest body, another template invocation, or a mixture containing ${name} markers. It is fully validated after expansion."
+    }
+  },
+  "additionalProperties": false
+}

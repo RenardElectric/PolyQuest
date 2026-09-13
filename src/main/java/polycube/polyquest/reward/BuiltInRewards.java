@@ -12,6 +12,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.util.Prediction;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import polycube.polyquest.PolyQuest;
 
 /// Built-in money, item, experience, and server-command rewards.
@@ -31,8 +32,7 @@ public final class BuiltInRewards {
                 DECIMAL_CODEC.fieldOf("amount").forGetter(Money::amount)
         ).apply(instance, Money::new));
 
-        public static final RewardApi.Type<Money> TYPE = new RewardApi.Type<>(
-                PolyQuest.id("money"), CODEC, BuiltInRewards::grantMoney);
+        public static final RewardApi.Type<Money> TYPE = new RewardApi.Type<>(PolyQuest.id("money"), CODEC, BuiltInRewards::grantMoney);
 
         @Override
         public RewardApi.Type<Money> type() {
@@ -40,13 +40,12 @@ public final class BuiltInRewards {
         }
     }
 
-    public record Item(ItemStack stack) implements RewardApi.Definition {
+    public record Item(ItemStackTemplate stackTemplate) implements RewardApi.Definition {
         public static final MapCodec<Item> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                ItemStack.CODEC.fieldOf("stack").forGetter(Item::stack)
+                ItemStackTemplate.CODEC.fieldOf("stack").forGetter(Item::stackTemplate)
         ).apply(instance, Item::new));
 
-        public static final RewardApi.Type<Item> TYPE = new RewardApi.Type<>(
-                PolyQuest.id("item"), CODEC, BuiltInRewards::grantItem);
+        public static final RewardApi.Type<Item> TYPE = new RewardApi.Type<>(PolyQuest.id("item"), CODEC, BuiltInRewards::grantItem);
 
         @Override
         public RewardApi.Type<Item> type() {
@@ -76,8 +75,7 @@ public final class BuiltInRewards {
                 Codec.STRING.listOf().fieldOf("commands").forGetter(ServerCommands::commands)
         ).apply(instance, ServerCommands::new));
 
-        public static final RewardApi.Type<ServerCommands> TYPE = new RewardApi.Type<>(
-                PolyQuest.id("commands"), CODEC, BuiltInRewards::grantCommands);
+        public static final RewardApi.Type<ServerCommands> TYPE = new RewardApi.Type<>(PolyQuest.id("commands"), CODEC, BuiltInRewards::grantCommands);
 
         @Override
         public RewardApi.Type<ServerCommands> type() {
@@ -104,7 +102,7 @@ public final class BuiltInRewards {
         if (player == null) {
             return RewardApi.GrantResult.retryLater("Player must be online for an item reward");
         }
-        ItemStack stack = reward.stack().copy();
+        ItemStack stack = reward.stackTemplate().create();
         boolean inserted = player.getInventory().add(stack);
         if (!inserted || !stack.isEmpty()) {
             player.drop(stack, false, Prediction.SERVER_ONLY);
@@ -117,8 +115,8 @@ public final class BuiltInRewards {
         if (player == null) {
             return RewardApi.GrantResult.retryLater("Player must be online for an experience reward");
         }
-        if (reward.points() < 0) {
-            return RewardApi.GrantResult.permanentFailure("Experience reward cannot be negative");
+        if (reward.points() <= 0) {
+            return RewardApi.GrantResult.permanentFailure("Experience reward must be positive");
         }
         player.giveExperiencePoints(reward.points());
         return RewardApi.GrantResult.success();
@@ -144,6 +142,5 @@ public final class BuiltInRewards {
         return RewardApi.GrantResult.success();
     }
 
-    private BuiltInRewards() {
-    }
+    private BuiltInRewards() {}
 }

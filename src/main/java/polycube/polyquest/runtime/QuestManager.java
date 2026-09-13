@@ -1,13 +1,9 @@
 package polycube.polyquest.runtime;
 
 import java.util.List;
-import java.util.Objects;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import polycube.polyquest.PolyQuest;
-import polycube.polyquest.admin.QuestAdministrationService;
 import polycube.polyquest.claim.QuestClaimService;
 import polycube.polyquest.config.QuestConfig;
 import polycube.polyquest.model.QuestModel;
@@ -25,7 +21,7 @@ public final class QuestManager {
     private final DailyRotationService rotation;
     private final QuestEngine engine;
     private final QuestClaimService claims;
-    private final QuestAdministrationService administration;
+    private final QuestCatalogManager.Subscription catalogSubscription;
     private long nextRewardRetryTick;
 
     public QuestManager(MinecraftServer server, QuestConfig config, QuestCatalogManager catalogs) {
@@ -35,9 +31,8 @@ public final class QuestManager {
         this.ledger = QuestLedger.load(server);
         this.rotation = new DailyRotationService(config);
         this.engine = new QuestEngine(server, catalogs, rotation, ledger);
-        this.claims = new QuestClaimService(server, config, engine, ledger);
-        this.administration = new QuestAdministrationService(this);
-        this.catalogs.addListener(_ -> refreshRotation(true));
+        this.claims = new QuestClaimService(server, engine, ledger, catalogs);
+        this.catalogSubscription = this.catalogs.addListener(_ -> refreshRotation(true));
         refreshRotation(false);
     }
 
@@ -53,10 +48,6 @@ public final class QuestManager {
         return claims;
     }
 
-    public QuestAdministrationService administration() {
-        return administration;
-    }
-
     public QuestLedger ledger() {
         return ledger;
     }
@@ -65,6 +56,7 @@ public final class QuestManager {
         return rotation;
     }
 
+    /// Runs rotation checks, timed conditions, player-tick signals, and scheduled reward retries.
     public void tick() {
         long tick = server.getTickCount();
         if (tick % 20L == 0L) {
@@ -75,7 +67,7 @@ public final class QuestManager {
             engine.onSignal(new QuestSignal.PlayerTick(player, tick));
         }
         if (tick >= nextRewardRetryTick) {
-            nextRewardRetryTick = tick + config.pendingRewardRetrySeconds * 20L;
+            nextRewardRetryTick = tick + config.pendingRewardRetrySeconds() * 20L;
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 claims.retryPending(player, false);
             }
@@ -87,7 +79,7 @@ public final class QuestManager {
     }
 
     public boolean reroll(QuestModel.Difficulty difficulty) {
-        boolean changed = rotation.reroll(difficulty, server, catalogs.current(), ledger);
+        boolean changed = rotation.reroll(difficulty, catalogs.current(), ledger);
         if (changed) {
             engine.rotationChanged();
             announceRotation();
@@ -104,7 +96,9 @@ public final class QuestManager {
     }
 
     public void shutdown() {
-        ledger.save();
+        catalogSubscription.close();
+        engine.close();
+        ledger.flush();
     }
 
     public List<QuestModel.Occurrence> available(ServerPlayer player) {
@@ -115,18 +109,19 @@ public final class QuestManager {
         return engine.attempt(player.getUUID(), occurrence);
     }
 
+    /// Synchronizes changed daily occurrences into the engine and handles their configured announcement.
     private void refreshRotation(boolean catalogReload) {
-        boolean changed = rotation.refresh(server, catalogs.current(), ledger);
+        boolean changed = rotation.refresh(catalogs.current(), ledger);
         if (changed) {
             engine.rotationChanged();
-            if (!catalogReload || config.announceRotation) {
+            if (!catalogReload || config.announceRotation()) {
                 announceRotation();
             }
         }
     }
 
     private void announceRotation() {
-        if (!config.announceRotation || rotation.current().slots().isEmpty()) return;
+        if (!config.announceRotation() || rotation.current().slots().isEmpty()) return;
         server.getPlayerList().broadcastSystemMessage(Component.literal("New PolyQuest daily quests are available."), false);
     }
 }

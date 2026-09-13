@@ -7,7 +7,9 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import net.minecraft.resources.Identifier;
+import org.jspecify.annotations.Nullable;
 import polycube.polyquest.runtime.ConditionRuntime;
 
 /// Public condition model and its data-driven type registry.
@@ -18,10 +20,7 @@ public final class ConditionApi {
     }
 
     /// Connects a definition codec to the factory for its mutable runtime instance.
-    public record Type<D extends Definition>(
-            Identifier id,
-            MapCodec<D> codec,
-            Factory<D> factory) {
+    public record Type<D extends Definition>(Identifier id, MapCodec<D> codec, Factory<D> factory) {
         public Type {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(codec, "codec");
@@ -43,8 +42,8 @@ public final class ConditionApi {
         return type;
     }
 
-    public static Type<?> get(Identifier id) {
-        return TYPES.get(id);
+    public static Optional<Type<?>> get(Identifier id) {
+        return Optional.ofNullable(TYPES.get(id));
     }
 
     public static Map<Identifier, Type<?>> types() {
@@ -55,7 +54,7 @@ public final class ConditionApi {
     public static Codec<Definition> codec() {
         Codec<Type<?>> typeCodec = Identifier.CODEC.comapFlatMap(
                 id -> {
-                    Type<?> type = TYPES.get(id);
+                    @Nullable Type<?> type = TYPES.get(id);
                     return type == null
                             ? DataResult.error(() -> "Unknown condition type '" + id + "'")
                             : DataResult.success(type);
@@ -65,7 +64,7 @@ public final class ConditionApi {
         return typeCodec.dispatch(
                 "type",
                 Definition::type,
-                type -> type.codec());
+                Type::codec);
     }
 
     private ConditionApi() {}

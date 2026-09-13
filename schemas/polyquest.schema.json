@@ -1,0 +1,576 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "polyquest.schema.json",
+  "title": "PolyQuest shared data types",
+  "description": "Shared definitions for PolyQuest quest, template, and reward-profile resources.",
+  "$defs": {
+    "identifier": {
+      "title": "Minecraft identifier",
+      "description": "A namespaced Minecraft identifier. Omitting the namespace uses minecraft.",
+      "type": "string",
+      "pattern": "^(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$",
+      "examples": ["minecraft:stone", "example:signals/finished"]
+    },
+    "registryReferenceSet": {
+      "title": "Minecraft registry entry or tag set",
+      "description": "The holder-set syntax accepted by Mojang registry codecs: one entry or tag, or a list of entries.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^#?(?:[a-z0-9_.-]+:)?[a-z0-9/._-]+$"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        }
+      ]
+    },
+    "integerBounds": {
+      "title": "Minecraft integer bounds",
+      "oneOf": [
+        { "type": "integer" },
+        {
+          "type": "object",
+          "properties": {
+            "min": { "type": "integer" },
+            "max": { "type": "integer" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "numberBounds": {
+      "title": "Minecraft number bounds",
+      "oneOf": [
+        { "type": "number" },
+        {
+          "type": "object",
+          "properties": {
+            "min": { "type": "number" },
+            "max": { "type": "number" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "stateProperties": {
+      "title": "Minecraft block or fluid state properties",
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "properties": {
+              "min": { "type": "string" },
+              "max": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "componentMap": {
+      "title": "Minecraft data components",
+      "description": "A Mojang data-component map. Component values use the codec registered for each component identifier.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "componentPredicateMap": {
+      "title": "Minecraft data-component predicates",
+      "description": "A Mojang component-predicate map. Values use the codec registered for each predicate identifier.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "itemPredicate": {
+      "title": "Minecraft item predicate",
+      "description": "Decoded directly by Mojang's ItemPredicate codec.",
+      "type": "object",
+      "properties": {
+        "items": { "$ref": "#/$defs/registryReferenceSet" },
+        "count": { "$ref": "#/$defs/integerBounds" },
+        "components": { "$ref": "#/$defs/componentMap" },
+        "predicates": { "$ref": "#/$defs/componentPredicateMap" }
+      },
+      "additionalProperties": false
+    },
+    "blockPredicate": {
+      "title": "Minecraft block predicate",
+      "description": "Decoded directly by Mojang's BlockPredicate codec.",
+      "type": "object",
+      "properties": {
+        "blocks": { "$ref": "#/$defs/registryReferenceSet" },
+        "state": { "$ref": "#/$defs/stateProperties" },
+        "nbt": { "type": "string", "description": "An SNBT compound predicate." },
+        "components": { "$ref": "#/$defs/componentMap" },
+        "predicates": { "$ref": "#/$defs/componentPredicateMap" }
+      },
+      "additionalProperties": false
+    },
+    "fluidPredicate": {
+      "title": "Minecraft fluid predicate",
+      "type": "object",
+      "properties": {
+        "fluids": { "$ref": "#/$defs/registryReferenceSet" },
+        "state": { "$ref": "#/$defs/stateProperties" }
+      },
+      "additionalProperties": false
+    },
+    "lightPredicate": {
+      "title": "Minecraft light predicate",
+      "type": "object",
+      "properties": {
+        "light": { "$ref": "#/$defs/integerBounds" }
+      },
+      "additionalProperties": false
+    },
+    "positionPredicate": {
+      "title": "Minecraft position predicate",
+      "type": "object",
+      "properties": {
+        "x": { "$ref": "#/$defs/numberBounds" },
+        "y": { "$ref": "#/$defs/numberBounds" },
+        "z": { "$ref": "#/$defs/numberBounds" }
+      },
+      "additionalProperties": false
+    },
+    "locationPredicate": {
+      "title": "Minecraft location predicate",
+      "description": "Decoded directly by Mojang's LocationPredicate codec.",
+      "type": "object",
+      "properties": {
+        "position": { "$ref": "#/$defs/positionPredicate" },
+        "biomes": { "$ref": "#/$defs/registryReferenceSet" },
+        "structures": { "$ref": "#/$defs/registryReferenceSet" },
+        "dimension": { "$ref": "#/$defs/identifier" },
+        "smokey": { "type": "boolean" },
+        "light": { "$ref": "#/$defs/lightPredicate" },
+        "block": { "$ref": "#/$defs/blockPredicate" },
+        "fluid": { "$ref": "#/$defs/fluidPredicate" },
+        "can_see_sky": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "entityPredicate": {
+      "title": "Minecraft entity predicate",
+      "description": "Decoded directly by Mojang's registry-dispatched EntityPredicate codec. Its keys are Minecraft entity-sub-predicate type identifiers, so this object remains extensible for registered types.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": true
+    },
+    "damageSourceTagPredicate": {
+      "title": "Minecraft damage-source tag predicate",
+      "type": "object",
+      "required": ["id", "expected"],
+      "properties": {
+        "id": { "$ref": "#/$defs/registryReferenceSet" },
+        "expected": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "damageSourcePredicate": {
+      "title": "Minecraft damage-source predicate",
+      "description": "Decoded directly by Mojang's DamageSourcePredicate codec.",
+      "type": "object",
+      "properties": {
+        "tags": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/damageSourceTagPredicate" },
+          "default": []
+        },
+        "direct_entity": { "$ref": "#/$defs/entityPredicate" },
+        "source_entity": { "$ref": "#/$defs/entityPredicate" },
+        "is_direct": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "itemStackTemplate": {
+      "title": "Minecraft item stack template",
+      "description": "Decoded directly by Mojang's ItemStackTemplate codec. A bare item identifier is shorthand for a count of one.",
+      "oneOf": [
+        { "$ref": "#/$defs/identifier" },
+        {
+          "type": "object",
+          "required": ["id"],
+          "properties": {
+            "id": { "$ref": "#/$defs/identifier" },
+            "count": { "type": "integer", "minimum": 1, "maximum": 99, "default": 1 },
+            "components": { "$ref": "#/$defs/componentMap" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "moneyReward": {
+      "title": "Money reward",
+      "type": "object",
+      "required": ["type", "amount"],
+      "properties": {
+        "type": { "const": "polyquest:money" },
+        "amount": {
+          "type": "string",
+          "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
+          "description": "A positive Java BigDecimal encoded as a string. Zero is rejected during catalog validation.",
+          "examples": ["10", "2.5"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "itemReward": {
+      "title": "Item reward",
+      "type": "object",
+      "required": ["type", "stack"],
+      "properties": {
+        "type": { "const": "polyquest:item" },
+        "stack": { "$ref": "#/$defs/itemStackTemplate" }
+      },
+      "additionalProperties": false
+    },
+    "experienceReward": {
+      "title": "Experience reward",
+      "type": "object",
+      "required": ["type", "points"],
+      "properties": {
+        "type": { "const": "polyquest:experience" },
+        "points": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "commandsReward": {
+      "title": "Server-command reward",
+      "type": "object",
+      "required": ["type", "commands"],
+      "properties": {
+        "type": { "const": "polyquest:commands" },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "\\S" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "reward": {
+      "title": "PolyQuest reward",
+      "oneOf": [
+        { "$ref": "#/$defs/moneyReward" },
+        { "$ref": "#/$defs/itemReward" },
+        { "$ref": "#/$defs/experienceReward" },
+        { "$ref": "#/$defs/commandsReward" }
+      ]
+    },
+    "rewardPlan": {
+      "title": "PolyQuest reward plan",
+      "description": "Choose either one reward profile or a non-empty list of inline rewards.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["profile"],
+          "properties": {
+            "profile": { "$ref": "#/$defs/identifier" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["rewards"],
+          "properties": {
+            "rewards": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/reward" }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "fallRules": {
+      "title": "Uninterrupted-fall rules",
+      "type": "object",
+      "properties": {
+        "allow_water": { "type": "boolean", "default": false },
+        "allow_lava": { "type": "boolean", "default": false },
+        "allow_climbing": { "type": "boolean", "default": false },
+        "allow_elytra": { "type": "boolean", "default": false },
+        "allow_vehicles": { "type": "boolean", "default": false },
+        "teleport_threshold": { "type": "number", "exclusiveMinimum": 0, "default": 16.0 }
+      },
+      "additionalProperties": false
+    },
+    "conditionChildren": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/condition" }
+    },
+    "consumeItemsCondition": {
+      "title": "Consume items at claim time",
+      "type": "object",
+      "required": ["type", "item", "count"],
+      "properties": {
+        "type": { "const": "polyquest:consume_items" },
+        "item": { "$ref": "#/$defs/itemPredicate" },
+        "count": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "fishItemCondition": {
+      "title": "Fish an item",
+      "type": "object",
+      "required": ["type", "item"],
+      "properties": {
+        "type": { "const": "polyquest:fish_item" },
+        "item": { "$ref": "#/$defs/itemPredicate" },
+        "count": { "type": "integer", "minimum": 1, "default": 1 }
+      },
+      "additionalProperties": false
+    },
+    "killEntityCondition": {
+      "title": "Kill an entity",
+      "type": "object",
+      "required": ["type", "victim"],
+      "properties": {
+        "type": { "const": "polyquest:kill_entity" },
+        "victim": { "$ref": "#/$defs/entityPredicate" },
+        "damage_source": { "$ref": "#/$defs/damageSourcePredicate" },
+        "count": { "type": "integer", "minimum": 1, "default": 1 }
+      },
+      "additionalProperties": false
+    },
+    "breakBlockCondition": {
+      "title": "Break a block",
+      "type": "object",
+      "required": ["type", "block"],
+      "properties": {
+        "type": { "const": "polyquest:break_block" },
+        "block": { "$ref": "#/$defs/blockPredicate" },
+        "tool": { "$ref": "#/$defs/itemPredicate" },
+        "count": { "type": "integer", "minimum": 1, "default": 1 }
+      },
+      "additionalProperties": false
+    },
+    "visitLocationCondition": {
+      "title": "Visit a location",
+      "type": "object",
+      "required": ["type", "location"],
+      "properties": {
+        "type": { "const": "polyquest:visit_location" },
+        "location": { "$ref": "#/$defs/locationPredicate" },
+        "continuous_ticks": { "type": "integer", "minimum": 1, "default": 1 }
+      },
+      "additionalProperties": false
+    },
+    "playerDeathCondition": {
+      "title": "Player death",
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "polyquest:player_death" },
+        "damage_source": { "$ref": "#/$defs/damageSourcePredicate" }
+      },
+      "additionalProperties": false
+    },
+    "obtainAdvancementCondition": {
+      "title": "Obtain an advancement",
+      "type": "object",
+      "required": ["type", "advancement"],
+      "properties": {
+        "type": { "const": "polyquest:obtain_advancement" },
+        "advancement": { "$ref": "#/$defs/identifier" }
+      },
+      "additionalProperties": false
+    },
+    "explicitSignalCondition": {
+      "title": "Receive an integration signal",
+      "type": "object",
+      "required": ["type", "signal"],
+      "properties": {
+        "type": { "const": "polyquest:explicit_signal" },
+        "signal": { "$ref": "#/$defs/identifier" },
+        "count": { "type": "integer", "minimum": 1, "default": 1 }
+      },
+      "additionalProperties": false
+    },
+    "uninterruptedFallCondition": {
+      "title": "Complete an uninterrupted fall",
+      "type": "object",
+      "required": ["type", "start", "end"],
+      "properties": {
+        "type": { "const": "polyquest:uninterrupted_fall" },
+        "start": { "$ref": "#/$defs/locationPredicate" },
+        "end": { "$ref": "#/$defs/locationPredicate" },
+        "minimum_distance": { "type": "number", "minimum": 0, "default": 0.0 },
+        "require_survival": { "type": "boolean", "default": true },
+        "rules": { "$ref": "#/$defs/fallRules" }
+      },
+      "additionalProperties": false
+    },
+    "allOfCondition": {
+      "title": "All child conditions",
+      "type": "object",
+      "required": ["type", "children"],
+      "properties": {
+        "type": { "const": "polyquest:all_of" },
+        "children": { "$ref": "#/$defs/conditionChildren" }
+      },
+      "additionalProperties": false
+    },
+    "anyOfCondition": {
+      "title": "Any child condition",
+      "type": "object",
+      "required": ["type", "children"],
+      "properties": {
+        "type": { "const": "polyquest:any_of" },
+        "children": { "$ref": "#/$defs/conditionChildren" }
+      },
+      "additionalProperties": false
+    },
+    "repeatCondition": {
+      "title": "Repeat a condition",
+      "type": "object",
+      "required": ["type", "child", "times"],
+      "properties": {
+        "type": { "const": "polyquest:repeat" },
+        "child": { "$ref": "#/$defs/condition" },
+        "times": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "sequenceCondition": {
+      "title": "Complete conditions in sequence",
+      "type": "object",
+      "required": ["type", "children"],
+      "properties": {
+        "type": { "const": "polyquest:sequence" },
+        "children": { "$ref": "#/$defs/conditionChildren" }
+      },
+      "additionalProperties": false
+    },
+    "timeWindowCondition": {
+      "title": "Time-limited condition",
+      "description": "The start condition, when used, must be signal-completable. first_progress requires a child that can receive signal progress.",
+      "type": "object",
+      "required": ["type", "child", "duration_ticks"],
+      "properties": {
+        "type": { "const": "polyquest:time_window" },
+        "child": { "$ref": "#/$defs/condition" },
+        "duration_ticks": { "type": "integer", "minimum": 1 },
+        "start_policy": {
+          "enum": ["immediate", "first_progress", "start_condition"],
+          "default": "first_progress"
+        },
+        "start_condition": { "$ref": "#/$defs/condition" },
+        "timeout_action": { "enum": ["reset", "exhaust"], "default": "reset" },
+        "max_attempts": { "type": "integer", "minimum": 0, "default": 0 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["start_policy"],
+            "properties": { "start_policy": { "const": "start_condition" } }
+          },
+          "then": { "required": ["start_condition"] },
+          "else": { "not": { "required": ["start_condition"] } }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "nOfMCondition": {
+      "title": "N of M child conditions",
+      "description": "required must not exceed the number of children; catalog validation enforces that cross-field constraint.",
+      "type": "object",
+      "required": ["type", "required", "children"],
+      "properties": {
+        "type": { "const": "polyquest:n_of_m" },
+        "required": { "type": "integer", "minimum": 1 },
+        "children": { "$ref": "#/$defs/conditionChildren" }
+      },
+      "additionalProperties": false
+    },
+    "optionalCondition": {
+      "title": "Optional child condition",
+      "description": "Claim-time consume_items conditions cannot be nested under optional.",
+      "type": "object",
+      "required": ["type", "child"],
+      "properties": {
+        "type": { "const": "polyquest:optional" },
+        "child": { "$ref": "#/$defs/condition" }
+      },
+      "additionalProperties": false
+    },
+    "choiceBranch": {
+      "title": "Choice branch",
+      "type": "object",
+      "required": ["name", "condition"],
+      "properties": {
+        "name": { "type": "string", "pattern": "\\S" },
+        "condition": { "$ref": "#/$defs/condition" }
+      },
+      "additionalProperties": false
+    },
+    "choiceCondition": {
+      "title": "Locking choice between branches",
+      "description": "Branch names must be unique; catalog validation enforces uniqueness by name.",
+      "type": "object",
+      "required": ["type", "branches"],
+      "properties": {
+        "type": { "const": "polyquest:choice" },
+        "branches": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/choiceBranch" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "condition": {
+      "title": "PolyQuest condition",
+      "oneOf": [
+        { "$ref": "#/$defs/consumeItemsCondition" },
+        { "$ref": "#/$defs/fishItemCondition" },
+        { "$ref": "#/$defs/killEntityCondition" },
+        { "$ref": "#/$defs/breakBlockCondition" },
+        { "$ref": "#/$defs/visitLocationCondition" },
+        { "$ref": "#/$defs/playerDeathCondition" },
+        { "$ref": "#/$defs/obtainAdvancementCondition" },
+        { "$ref": "#/$defs/explicitSignalCondition" },
+        { "$ref": "#/$defs/uninterruptedFallCondition" },
+        { "$ref": "#/$defs/allOfCondition" },
+        { "$ref": "#/$defs/anyOfCondition" },
+        { "$ref": "#/$defs/repeatCondition" },
+        { "$ref": "#/$defs/sequenceCondition" },
+        { "$ref": "#/$defs/timeWindowCondition" },
+        { "$ref": "#/$defs/nOfMCondition" },
+        { "$ref": "#/$defs/optionalCondition" },
+        { "$ref": "#/$defs/choiceCondition" }
+      ]
+    },
+    "questBody": {
+      "title": "Inline PolyQuest quest",
+      "type": "object",
+      "required": ["availability", "title", "condition", "rewards"],
+      "properties": {
+        "availability": { "enum": ["daily", "unique"] },
+        "difficulty": { "enum": ["easy", "medium", "hard"] },
+        "title": { "type": "string", "pattern": "\\S" },
+        "description": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "condition": { "$ref": "#/$defs/condition" },
+        "rewards": { "$ref": "#/$defs/rewardPlan" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "availability": { "const": "daily" } } },
+          "then": { "required": ["difficulty"] },
+          "else": { "not": { "required": ["difficulty"] } }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

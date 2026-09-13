@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.StringRepresentable;
 import polycube.polyquest.condition.ConditionApi;
@@ -80,25 +79,24 @@ public final class QuestModel {
         ).apply(instance, Body::new));
 
         public Body {
-            difficulty = Objects.requireNonNull(difficulty, "difficulty");
+            Objects.requireNonNull(availability, "availability");
+            Objects.requireNonNull(difficulty, "difficulty");
+            Objects.requireNonNull(title, "title");
             description = List.copyOf(description);
+            Objects.requireNonNull(condition, "condition");
+            Objects.requireNonNull(rewards, "rewards");
         }
     }
 
     public record Definition(
-            Identifier id,
-            Availability availability,
-            Optional<Difficulty> difficulty,
-            String title,
-            List<String> description,
-            ConditionApi.Definition condition,
-            RewardApi.Plan rewards,
-            String behaviorHash,
-            String presentationHash) {
+            Identifier id, Availability availability, Optional<Difficulty> difficulty,
+            String title, List<String> description, ConditionApi.Definition condition,
+            RewardApi.Plan rewards, String behaviorHash, String presentationHash
+    ) {
         public Definition {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(availability, "availability");
-            difficulty = Objects.requireNonNull(difficulty, "difficulty");
+            Objects.requireNonNull(difficulty, "difficulty");
             Objects.requireNonNull(title, "title");
             description = List.copyOf(description);
             Objects.requireNonNull(condition, "condition");
@@ -107,37 +105,33 @@ public final class QuestModel {
             Objects.requireNonNull(presentationHash, "presentationHash");
         }
 
-        public static Definition fromBody(
-                Identifier id,
-                Body body,
-                String behaviorHash,
-                String presentationHash) {
+        public static Definition fromBody(Identifier id, Body body, String behaviorHash, String presentationHash) {
             return new Definition(
-                    id,
-                    body.availability(),
-                    body.difficulty(),
-                    body.title(),
-                    body.description(),
-                    body.condition(),
-                    body.rewards(),
-                    behaviorHash,
-                    presentationHash);
+                    id, body.availability(), body.difficulty(),
+                    body.title(), body.description(), body.condition(),
+                    body.rewards(), behaviorHash, presentationHash
+            );
         }
     }
 
     /// One appearance of a definition. Daily occurrences are scoped to a date and slot;
     /// unique occurrences are scoped only to their current behavior revision.
-    public record Occurrence(
-            Key key,
-            Definition definition,
-            Instant availableFrom,
-            Optional<Instant> availableUntil) {
+    public record Occurrence(Key key, Definition definition, Instant availableFrom, Optional<Instant> availableUntil) {
+        public Occurrence {
+            Objects.requireNonNull(key, "key");
+            Objects.requireNonNull(definition, "definition");
+            Objects.requireNonNull(availableFrom, "availableFrom");
+            Objects.requireNonNull(availableUntil, "availableUntil");
+        }
     }
 
-    public record Key(
-            Identifier questId,
-            String behaviorHash,
-            Scope scope) {
+    public record Key(Identifier questId, String behaviorHash, Scope scope) {
+        public Key {
+            Objects.requireNonNull(questId, "questId");
+            Objects.requireNonNull(behaviorHash, "behaviorHash");
+            Objects.requireNonNull(scope, "scope");
+        }
+
         public String persistentKey() {
             return questId + "|" + behaviorHash + "|" + scope.serialized();
         }
@@ -148,6 +142,11 @@ public final class QuestModel {
     }
 
     public record DailyScope(LocalDate date, Difficulty slot, int generation) implements Scope {
+        public DailyScope {
+            Objects.requireNonNull(date, "date");
+            Objects.requireNonNull(slot, "slot");
+        }
+
         @Override
         public String serialized() {
             return "daily:" + date + ':' + slot.getSerializedName() + ':' + generation;
@@ -161,9 +160,7 @@ public final class QuestModel {
         }
     }
 
-    public record Catalog(
-            Map<Identifier, Definition> quests,
-            Map<Identifier, RewardApi.Profile> rewardProfiles) {
+    public record Catalog(Map<Identifier, Definition> quests, Map<Identifier, RewardApi.Profile> rewardProfiles) {
         public static final Catalog EMPTY = new Catalog(Map.of(), Map.of());
 
         public Catalog {
@@ -174,7 +171,7 @@ public final class QuestModel {
         public List<Definition> daily(Difficulty difficulty) {
             return quests.values().stream()
                     .filter(quest -> quest.availability() == Availability.DAILY)
-                    .filter(quest -> quest.difficulty().orElse(null) == difficulty)
+                    .filter(quest -> quest.difficulty().filter(difficulty::equals).isPresent())
                     .sorted(java.util.Comparator.comparing(quest -> quest.id().toString()))
                     .toList();
         }
@@ -187,10 +184,9 @@ public final class QuestModel {
         }
     }
 
-    public record DailyAssignment(
-            LocalDate date,
-            Map<Difficulty, Occurrence> slots) {
+    public record DailyAssignment(LocalDate date, Map<Difficulty, Occurrence> slots) {
         public DailyAssignment {
+            Objects.requireNonNull(date, "date");
             EnumMap<Difficulty, Occurrence> copy = new EnumMap<>(Difficulty.class);
             copy.putAll(slots);
             slots = Map.copyOf(copy);
@@ -205,9 +201,5 @@ public final class QuestModel {
         EXHAUSTED
     }
 
-    public record PlayerQuestKey(UUID playerId, Key occurrence) {
-    }
-
-    private QuestModel() {
-    }
+    private QuestModel() {}
 }

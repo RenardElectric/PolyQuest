@@ -1,4 +1,4 @@
 @NullMarked
-package polycube.polyquest.admin;
+package polycube.polyquest.config;
 
 import org.jspecify.annotations.NullMarked;

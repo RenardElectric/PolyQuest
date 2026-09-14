@@ -1,13 +1,13 @@
 package polycube.polyquest.runtime;
 
 import com.google.gson.JsonObject;
-import java.util.List;
-import java.util.Objects;
-import java.util.function.LongSupplier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import polycube.polyquest.condition.ConditionApi;
 import polycube.polyquest.signal.QuestSignal;
+
+import java.util.List;
+import java.util.function.LongSupplier;
 
 /// Mutable per-player condition state and claim-time operations.
 public final class ConditionRuntime {
@@ -102,8 +102,9 @@ public final class ConditionRuntime {
         public static CommitResult success(Runnable rollback) {
             return new CommitResult(true, rollback, "");
         }
+
         public static CommitResult failure(String reason) {
-            return new CommitResult(false, () -> { }, reason);
+            return new CommitResult(false, () -> {}, reason);
         }
     }
 

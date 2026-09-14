@@ -3,10 +3,6 @@ package polycube.polyquest.commands;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
-
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
@@ -14,6 +10,10 @@ import net.minecraft.server.permissions.PermissionLevel;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.model.QuestModel;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 
 public final class RerollCommand extends PolyQuestCommand {
     public RerollCommand() {

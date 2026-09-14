@@ -1,7 +1,5 @@
 package polycube.polyquest.commands;
 
-import java.util.List;
-import java.util.Objects;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
@@ -10,6 +8,9 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import org.jspecify.annotations.Nullable;
 import polycube.polyquest.PolyQuest;
+
+import java.util.List;
+import java.util.Objects;
 
 public final class PolyQuestCommands {
     private static @Nullable List<PolyQuestCommand> commands;

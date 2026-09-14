@@ -8,6 +8,9 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.util.StrictJsonParser;
+import polycube.polyquest.PolyQuest;
+
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -19,9 +22,6 @@ import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.util.Objects;
 import java.util.function.Function;
-import net.minecraft.util.StrictJsonParser;
-import org.jspecify.annotations.Nullable;
-import polycube.polyquest.PolyQuest;
 
 /// Immutable server-wide settings decoded through Mojang's codec infrastructure.
 public record QuestConfig(

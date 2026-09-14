@@ -1,13 +1,8 @@
 package polycube.polyquest.condition;
 
-import static polycube.polyquest.condition.ConditionApi.Capabilities.CLAIM_TIME_COST;
-import static polycube.polyquest.condition.ConditionApi.Capabilities.SIGNAL_DRIVEN;
-import static polycube.polyquest.condition.ConditionApi.Semantics.constant;
-
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import java.util.Optional;
 import net.minecraft.advancements.predicates.BlockPredicate;
 import net.minecraft.advancements.predicates.DamageSourcePredicate;
 import net.minecraft.advancements.predicates.ItemPredicate;
@@ -15,6 +10,12 @@ import net.minecraft.advancements.predicates.LocationPredicate;
 import net.minecraft.advancements.predicates.entity.EntityPredicate;
 import net.minecraft.resources.Identifier;
 import polycube.polyquest.PolyQuest;
+
+import java.util.Optional;
+
+import static polycube.polyquest.condition.ConditionApi.Capabilities.CLAIM_TIME_COST;
+import static polycube.polyquest.condition.ConditionApi.Capabilities.SIGNAL_DRIVEN;
+import static polycube.polyquest.condition.ConditionApi.Semantics.constant;
 
 /// Datapack definitions for PolyQuest's vanilla-predicate-backed atomic conditions.
 /// Mutable player state is kept separately in {@link BuiltInConditionRuntime}.

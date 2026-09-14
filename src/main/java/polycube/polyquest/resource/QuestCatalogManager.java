@@ -1,13 +1,10 @@
 package polycube.polyquest.resource;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Consumer;
 import net.minecraft.resources.Identifier;
 import polycube.polyquest.model.QuestModel;
+
+import java.util.*;
+import java.util.function.Consumer;
 
 /// Owns the currently published immutable catalog and computes reload differences.
 public final class QuestCatalogManager {

@@ -41,7 +41,7 @@ public final class ClaimCommand extends PolyQuestCommand {
                                         EntityArgument.getPlayers(context, "player")))));
     }
 
-    private  static int claim(CommandSourceStack source, Identifier id, Collection<ServerPlayer> players) throws CommandSyntaxException {
+    private static int claim(CommandSourceStack source, Identifier id, Collection<ServerPlayer> players) throws CommandSyntaxException {
         int total = 0;
         for (var player : players) {
             total += claim(source, id, player);

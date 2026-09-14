@@ -1,11 +1,12 @@
 package polycube.polyquest.runtime;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Optional;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import polycube.polyquest.model.QuestModel;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
 
 /// In-memory, restart-discarded quest attempts for one player UUID.
 public final class PlayerQuestSession {
@@ -46,11 +47,11 @@ public final class PlayerQuestSession {
             Optional.ofNullable(definitions.get(attempt.occurrence().definition().id()))
                     .filter(definition -> definition.behaviorHash().equals(attempt.occurrence().definition().behaviorHash()))
                     .ifPresent(definition ->
-                attempt.updatePresentation(new QuestModel.Occurrence(
-                        attempt.occurrence().key(),
-                        definition,
-                        attempt.occurrence().availableFrom(),
-                        attempt.occurrence().availableUntil())));
+                            attempt.updatePresentation(new QuestModel.Occurrence(
+                                    attempt.occurrence().key(),
+                                    definition,
+                                    attempt.occurrence().availableFrom(),
+                                    attempt.occurrence().availableUntil())));
         }
     }
 }

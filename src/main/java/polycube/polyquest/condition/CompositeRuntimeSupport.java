@@ -2,9 +2,10 @@ package polycube.polyquest.condition;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import polycube.polyquest.runtime.ConditionRuntime;
+
 import java.util.ArrayList;
 import java.util.List;
-import polycube.polyquest.runtime.ConditionRuntime;
 
 /// Shared tree plumbing for composite runtime nodes.
 final class CompositeRuntimeSupport {

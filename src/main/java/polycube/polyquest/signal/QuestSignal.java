@@ -1,6 +1,5 @@
 package polycube.polyquest.signal;
 
-import java.util.List;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
@@ -14,12 +13,13 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
+
 /// Normalized server-thread events consumed by condition instances.
 public sealed interface QuestSignal
         permits QuestSignal.Kill, QuestSignal.Fishing,
         QuestSignal.BlockBroken, QuestSignal.PlayerDeath,
-        QuestSignal.Advancement, QuestSignal.PlayerTick, QuestSignal.Explicit
-{
+        QuestSignal.Advancement, QuestSignal.PlayerTick, QuestSignal.Explicit {
     ServerPlayer player();
 
     long serverTick();

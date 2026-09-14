@@ -3,13 +3,13 @@ package polycube.polyquest.condition;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
 import net.minecraft.util.StringRepresentable;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.condition.ConditionApi.Capabilities;
 import polycube.polyquest.condition.ConditionApi.SemanticLookup;
+
+import java.util.List;
+import java.util.Optional;
 
 /// Immutable datapack definitions for composite quest conditions.
 /// Runtime tree state is split into logical and flow-oriented implementations.

@@ -1,11 +1,5 @@
 package polycube.polyquest.resource;
 
-import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStackTemplate;
 import polycube.polyquest.condition.BuiltInConditions;
@@ -14,6 +8,9 @@ import polycube.polyquest.condition.ConditionApi;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.reward.BuiltInRewards;
 import polycube.polyquest.reward.RewardApi;
+
+import java.math.BigDecimal;
+import java.util.*;
 
 /// Semantic validation performed after codec decoding and template expansion.
 public final class QuestDefinitionValidator {

@@ -1,8 +1,5 @@
 package polycube.polyquest.api;
 
-import java.util.List;
-import java.util.UUID;
-
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.mojang.serialization.DataResult;
@@ -15,6 +12,8 @@ import polycube.polyquest.reward.RewardApi;
 import polycube.polyquest.runtime.QuestManager;
 import polycube.polyquest.runtime.QuestRuntime;
 import polycube.polyquest.signal.QuestSignal;
+
+import java.util.List;
 
 /// Small integration API for the economy provider and other server-side mods.
 public final class PolyQuestApi {
@@ -39,8 +38,8 @@ public final class PolyQuestApi {
     public static DataResult<QuestModel.Occurrence> quest(NameAndId player, Identifier questId) {
         return manager().flatMap(
                 manager ->
-                    manager.engine().findOccurrence(player.id(), questId).map(DataResult::success)
-                            .orElse(DataResult.error(() -> "Quest not found for player " + player + ": " + questId))
+                        manager.engine().findOccurrence(player.id(), questId).map(DataResult::success)
+                                .orElse(DataResult.error(() -> "Quest not found for player " + player + ": " + questId))
         );
     }
 
@@ -65,11 +64,11 @@ public final class PolyQuestApi {
     public static DataResult<QuestManager> reset(NameAndId player, Identifier questId) {
         return manager().flatMap(
                 manager ->
-                    quest(player, questId).map(oc -> {
-                        manager.engine().reset(player.id(), oc);
-                        return manager;
-                    })
-                );
+                        quest(player, questId).map(oc -> {
+                            manager.engine().reset(player.id(), oc);
+                            return manager;
+                        })
+        );
     }
 
     /// Retries any pending reward transactions for the given player, if the quest manager is installed.
@@ -82,10 +81,10 @@ public final class PolyQuestApi {
         return manager().flatMap(
                 manager ->
                         quest(player, questId).map(oc -> {
-                        var attempt = manager.attempt(player, oc);
-                        return GSON.toJson(attempt.diagnostic());
-                    })
-                );
+                            var attempt = manager.attempt(player, oc);
+                            return GSON.toJson(attempt.diagnostic());
+                        })
+        );
     }
 
     private PolyQuestApi() {}

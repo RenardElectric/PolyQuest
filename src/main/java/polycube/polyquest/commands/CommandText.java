@@ -1,8 +1,5 @@
 package polycube.polyquest.commands;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Locale;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
@@ -14,6 +11,10 @@ import org.jetbrains.annotations.Nullable;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.model.QuestModel;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Locale;
 
 /// Shared, vanilla-client-compatible chat formatting. Never styles a caller's component in place.
 public final class CommandText {

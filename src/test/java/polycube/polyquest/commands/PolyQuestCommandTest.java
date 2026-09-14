@@ -31,9 +31,9 @@ class PolyQuestCommandTest {
         assertEquals(
                 List.of(
                         PermissionLevel.ALL,
-                        PermissionLevel.ALL,
-                        PermissionLevel.ALL,
-                        PermissionLevel.ALL,
+                        PermissionLevel.GAMEMASTERS,
+                        PermissionLevel.GAMEMASTERS,
+                        PermissionLevel.GAMEMASTERS,
                         PermissionLevel.GAMEMASTERS,
                         PermissionLevel.GAMEMASTERS,
                         PermissionLevel.GAMEMASTERS

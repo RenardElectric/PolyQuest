@@ -3,12 +3,13 @@ package polycube.polyquest.condition;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
+import net.minecraft.resources.Identifier;
+import polycube.polyquest.runtime.ConditionRuntime;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import net.minecraft.resources.Identifier;
-import polycube.polyquest.runtime.ConditionRuntime;
 
 /// Public condition model and its data-driven type registry.
 public final class ConditionApi {

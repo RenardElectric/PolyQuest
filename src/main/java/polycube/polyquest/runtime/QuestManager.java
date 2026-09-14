@@ -1,7 +1,5 @@
 package polycube.polyquest.runtime;
 
-import java.util.List;
-
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -13,6 +11,8 @@ import polycube.polyquest.persistence.QuestLedger;
 import polycube.polyquest.resource.QuestCatalogManager;
 import polycube.polyquest.rotation.DailyRotationService;
 import polycube.polyquest.signal.QuestSignal;
+
+import java.util.List;
 
 /// Server-scoped facade used by Fabric callbacks, commands, and future UI adapters.
 public final class QuestManager {

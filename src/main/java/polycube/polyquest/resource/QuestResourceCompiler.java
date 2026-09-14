@@ -1,29 +1,12 @@
 package polycube.polyquest.resource;
 
 import com.google.common.hash.Hashing;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
-import com.google.gson.JsonPrimitive;
+import com.google.gson.*;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import java.io.IOException;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
@@ -34,6 +17,13 @@ import net.minecraft.util.StrictJsonParser;
 import org.jspecify.annotations.Nullable;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.reward.RewardApi;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /// Loads and compiles the complete PolyQuest datapack module behind one interface.
 final class QuestResourceCompiler {
@@ -155,7 +145,7 @@ final class QuestResourceCompiler {
 
     private static <T> Map<Identifier, T> decodeResources(
             Map<Identifier, JsonElement> resources, Codec<T> codec,
-        DynamicOps<JsonElement> ops, String kind, List<String> errors
+            DynamicOps<JsonElement> ops, String kind, List<String> errors
     ) {
         Map<Identifier, T> result = new TreeMap<>();
         for (var entry : new TreeMap<>(resources).entrySet()) {

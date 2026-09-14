@@ -1,8 +1,5 @@
 package polycube.polyquest.mixin;
 
-import java.util.Collection;
-import java.util.List;
-
 import net.minecraft.advancements.triggers.FishingRodHookedTrigger;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.projectile.FishingHook;
@@ -13,6 +10,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import polycube.polyquest.runtime.QuestRuntime;
 import polycube.polyquest.signal.QuestSignal;
+
+import java.util.Collection;
+import java.util.List;
 
 /// Reuses the point where vanilla evaluates `fishing_rod_hooked`, preserving the exact
 /// caught loot collection instead of trying to infer fishing from later item pickups.

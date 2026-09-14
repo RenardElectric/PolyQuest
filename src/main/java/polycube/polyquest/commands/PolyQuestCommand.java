@@ -3,8 +3,6 @@ package polycube.polyquest.commands;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import java.util.ArrayList;
-import java.util.List;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -17,6 +15,9 @@ import net.minecraft.server.permissions.Permission;
 import net.minecraft.server.permissions.PermissionLevel;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public abstract class PolyQuestCommand {
     private final String name;
@@ -84,12 +85,12 @@ public abstract class PolyQuestCommand {
 
     public LiteralArgumentBuilder<CommandSourceStack> getCommand(String name) {
         return Commands.literal(name)
-                    .requires(source -> hasPermission(source, permissionLevel))
-                    .executes(e -> execute(e.getSource()))
-                    .then(Commands.literal("help").executes(e -> {
-                        e.getSource().sendSuccess(this::getFullDescription, false);
-                        return 1;
-                    }));
+                .requires(source -> hasPermission(source, permissionLevel))
+                .executes(e -> execute(e.getSource()))
+                .then(Commands.literal("help").executes(e -> {
+                    e.getSource().sendSuccess(this::getFullDescription, false);
+                    return 1;
+                }));
 
     }
 

@@ -41,8 +41,8 @@ public final class QuestReloadListener extends SimpleReloadListener<DataResult<Q
                     catalog.rewardProfiles().size());
         });
         prepared.ifError(error ->
-            PolyQuest.LOGGER.error(
-                    "PolyQuest datapack reload failed; keeping the previous catalog:\n{}",
-                    error.message()));
+                PolyQuest.LOGGER.error(
+                        "PolyQuest datapack reload failed; keeping the previous catalog:\n{}",
+                        error.message()));
     }
 }

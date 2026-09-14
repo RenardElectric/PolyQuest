@@ -4,8 +4,6 @@ import com.mojang.brigadier.ParseResults;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import java.math.BigDecimal;
-import java.util.List;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.level.ServerPlayer;
@@ -14,6 +12,9 @@ import net.minecraft.util.Prediction;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
 import polycube.polyquest.PolyQuest;
+
+import java.math.BigDecimal;
+import java.util.List;
 
 /// Built-in money, item, experience, and server-command rewards.
 public final class BuiltInRewards {

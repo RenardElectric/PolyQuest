@@ -1,12 +1,13 @@
 package polycube.polyquest.runtime;
 
-import java.util.Optional;
-import java.util.function.Consumer;
 import net.minecraft.server.MinecraftServer;
 import org.jspecify.annotations.Nullable;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.config.QuestConfig;
 import polycube.polyquest.model.QuestModel;
+
+import java.util.Optional;
+import java.util.function.Consumer;
 
 /// Process-local holder for the one integrated server's quest manager.
 public final class QuestRuntime {

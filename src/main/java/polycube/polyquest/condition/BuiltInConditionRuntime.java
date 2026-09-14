@@ -1,14 +1,6 @@
 package polycube.polyquest.condition;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import java.util.ArrayList;
-import java.util.List;
-
-import com.mojang.serialization.JsonOps;
-import net.minecraft.advancements.predicates.DamageSourcePredicate;
 import net.minecraft.advancements.predicates.ItemPredicate;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceKey;
@@ -22,6 +14,9 @@ import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 import polycube.polyquest.runtime.ConditionRuntime;
 import polycube.polyquest.signal.QuestSignal;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /// Mutable implementations for the immutable definitions in {@link BuiltInConditions}.
 final class BuiltInConditionRuntime {
@@ -370,7 +365,7 @@ final class BuiltInConditionRuntime {
                 }
                 if (!active && player.getDeltaMovement().y < 0.0
                         && definition.start().matches(
-                                level, airborneOrigin.x, airborneOrigin.y, airborneOrigin.z)) {
+                        level, airborneOrigin.x, airborneOrigin.y, airborneOrigin.z)) {
                     active = true;
                     startPosition = airborneOrigin;
                 }

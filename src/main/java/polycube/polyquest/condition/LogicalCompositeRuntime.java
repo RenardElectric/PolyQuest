@@ -2,11 +2,12 @@ package polycube.polyquest.condition;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import polycube.polyquest.runtime.ConditionRuntime;
+import polycube.polyquest.signal.QuestSignal;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Function;
-import polycube.polyquest.runtime.ConditionRuntime;
-import polycube.polyquest.signal.QuestSignal;
 
 /// Concurrent, threshold, optional, and branching composite runtime nodes.
 final class LogicalCompositeRuntime {

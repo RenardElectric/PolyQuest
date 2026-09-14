@@ -1,9 +1,10 @@
 package polycube.polyquest.condition;
 
 import com.google.gson.JsonObject;
-import java.util.Optional;
 import polycube.polyquest.runtime.ConditionRuntime;
 import polycube.polyquest.signal.QuestSignal;
+
+import java.util.Optional;
 
 /// Repetition, ordering, and deadline-oriented composite runtime nodes.
 final class FlowCompositeRuntime {
@@ -294,8 +295,8 @@ final class FlowCompositeRuntime {
             return exhausted
                     || child.exhausted()
                     || (definition.startPolicy() == CompositeConditions.StartPolicy.START_CONDITION
-                            && deadline < 0L
-                            && startCondition.orElseThrow().exhausted());
+                    && deadline < 0L
+                    && startCondition.orElseThrow().exhausted());
         }
 
         @Override

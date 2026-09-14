@@ -1,9 +1,5 @@
 package polycube.polyquest.claim;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -15,6 +11,10 @@ import polycube.polyquest.reward.RewardApi;
 import polycube.polyquest.runtime.ConditionRuntime;
 import polycube.polyquest.runtime.QuestAttempt;
 import polycube.polyquest.runtime.QuestEngine;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
 /// Validates a claim, commits condition costs, and grants a durably tracked reward bundle.
 public final class QuestClaimService {

@@ -2,13 +2,11 @@ package polycube.polyquest.commands;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import net.minecraft.SharedConstants;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.server.permissions.PermissionLevel;
 import org.junit.jupiter.api.BeforeAll;

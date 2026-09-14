@@ -75,8 +75,8 @@ java {
 }
 
 jar {
-    def licenseFileName = "LICENSE_${mod_id}"
-    from("LICENSE") {
-        rename("LICENSE", licenseFileName)
+    def licenseFileName = "LICENSE_${mod_id}.txt"
+    from("LICENSE.txt") {
+        rename("LICENSE.txt", licenseFileName)
     }
 }

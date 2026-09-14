@@ -1,5 +1,6 @@
 package polycube.polyquest.condition;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -71,12 +72,56 @@ final class CompositeConditionsTest {
         assertFalse(instance.completed());
     }
 
+    @Test
+    void registeredSemanticsComposeThroughConditionTrees() {
+        ConditionApi.Definition signal = new Stub(
+                false, false, ConditionApi.Capabilities.SIGNAL_DRIVEN);
+        ConditionApi.Definition claim = new Stub(
+                false, false, ConditionApi.Capabilities.CLAIM_TIME_COST);
+        ConditionApi.Capabilities mixedAll = new ConditionApi.Capabilities(false, true, true);
+        ConditionApi.Capabilities mixedAny = new ConditionApi.Capabilities(true, true, true);
+
+        assertAll(
+                () -> assertEquals(mixedAll, ConditionApi.capabilities(
+                        new CompositeConditions.AllOf(List.of(signal, claim)))),
+                () -> assertEquals(mixedAny, ConditionApi.capabilities(
+                        new CompositeConditions.AnyOf(List.of(signal, claim)))),
+                () -> assertEquals(mixedAll, ConditionApi.capabilities(
+                        new CompositeConditions.NOfM(2, List.of(signal, claim)))),
+                () -> assertEquals(ConditionApi.Capabilities.CLAIM_TIME_COST,
+                        ConditionApi.capabilities(new CompositeConditions.Repeat(claim, 2))),
+                () -> assertEquals(mixedAll, ConditionApi.capabilities(
+                        new CompositeConditions.Sequence(List.of(signal, claim)))),
+                () -> assertEquals(new ConditionApi.Capabilities(true, false, true),
+                        ConditionApi.capabilities(new CompositeConditions.OptionalChild(claim))),
+                () -> assertEquals(mixedAny, ConditionApi.capabilities(
+                        new CompositeConditions.Choice(List.of(
+                                new CompositeConditions.Branch("signal", signal),
+                                new CompositeConditions.Branch("claim", claim))))),
+                () -> assertEquals(new ConditionApi.Capabilities(true, false, true),
+                        ConditionApi.capabilities(new CompositeConditions.TimeWindow(
+                                signal,
+                                20L,
+                                CompositeConditions.StartPolicy.START_CONDITION,
+                                Optional.of(claim),
+                                CompositeConditions.TimeoutAction.RESET,
+                                0)))
+        );
+    }
+
     private static ConditionRuntime.Instance create(ConditionApi.Definition definition) {
         return ConditionRuntime.create(definition, new ConditionRuntime.CreationContext(() -> 0L));
     }
 
-    private record Stub(boolean initiallyCompleted, boolean initiallyExhausted)
-            implements ConditionApi.Definition {
+    private record Stub(
+            boolean initiallyCompleted,
+            boolean initiallyExhausted,
+            ConditionApi.Capabilities capabilities
+    ) implements ConditionApi.Definition {
+        private Stub(boolean initiallyCompleted, boolean initiallyExhausted) {
+            this(initiallyCompleted, initiallyExhausted, ConditionApi.Capabilities.SIGNAL_DRIVEN);
+        }
+
         private static final MapCodec<Stub> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 Codec.BOOL.fieldOf("completed").forGetter(Stub::initiallyCompleted),
                 Codec.BOOL.fieldOf("exhausted").forGetter(Stub::initiallyExhausted)
@@ -84,7 +129,8 @@ final class CompositeConditionsTest {
         private static final ConditionApi.Type<Stub> TYPE = new ConditionApi.Type<>(
                 Identifier.fromNamespaceAndPath("polyquest_test", "stub"),
                 CODEC,
-                StubInstance::new);
+                StubInstance::new,
+                (definition, children) -> definition.capabilities());
 
         @Override
         public ConditionApi.Type<Stub> type() {

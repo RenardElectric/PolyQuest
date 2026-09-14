@@ -1,17 +1,22 @@
 package polycube.polyquest.commands;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permission;
 import net.minecraft.server.permissions.PermissionLevel;
 import polycube.polyquest.PolyQuest;
-
-import java.util.ArrayList;
-import java.util.List;
+import polycube.polyquest.api.PolyQuestApi;
 
 public abstract class PolyQuestCommand {
     private final String name;
@@ -51,8 +56,10 @@ public abstract class PolyQuestCommand {
                 .append("\n" + getDescription());
         if (permissionLevel != PermissionLevel.ALL) message.append(CommandText.muted(" (Admin only)"));
         for (String variant : usage.split(" \\| ")) {
-            message.append("\n  ").append(CommandText.value("/" + PolyQuest.MOD_ID + " " + name
-                    + (variant.isBlank() ? "" : " " + variant)));
+            String command = "/" + PolyQuest.MOD_ID + " " + name;
+            message.append("\n  ").append(CommandText.action(
+                    command + (variant.isBlank() ? "" : " " + variant),
+                    command + (variant.isBlank() ? "" : " ")));
         }
         if (hasQuickAlias) {
             var shortcuts = new ArrayList<String>();
@@ -102,6 +109,22 @@ public abstract class PolyQuestCommand {
 
     protected boolean hasPermission(CommandSourceStack source, PermissionLevel permissionLevel) {
         return source.permissions().hasPermission(new Permission.HasCommandLevel(permissionLevel));
+    }
+
+    /// Creates a Minecraft identifier argument suggested from the player's current occurrences.
+    protected RequiredArgumentBuilder<CommandSourceStack, Identifier> questArgument(String argumentName) {
+        return Commands.argument(argumentName, IdentifierArgument.id())
+                .suggests((context, builder) -> {
+                    if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
+                        return builder.buildFuture();
+                    }
+                    return PolyQuestApi.availableQuests(player.nameAndId()).result()
+                            .map(occurrences -> SharedSuggestionProvider.suggestResource(
+                                    occurrences.stream()
+                                            .map(occurrence -> occurrence.definition().id()),
+                                    builder))
+                            .orElseGet(builder::buildFuture);
+                });
     }
 
     protected int execute(CommandSourceStack source) throws CommandSyntaxException {

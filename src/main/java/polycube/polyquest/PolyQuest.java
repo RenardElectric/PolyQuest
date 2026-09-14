@@ -6,11 +6,11 @@ import net.fabricmc.fabric.api.resource.v1.DataResourceLoader;
 import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import polycube.polyquest.commands.PolyQuestCommands;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.condition.CompositeConditions;
 import polycube.polyquest.config.QuestConfig;
 import polycube.polyquest.integration.FabricQuestEvents;
-import polycube.polyquest.integration.QuestCommands;
 import polycube.polyquest.resource.QuestCatalogManager;
 import polycube.polyquest.resource.QuestReloadListener;
 import polycube.polyquest.reward.BuiltInRewards;
@@ -37,10 +37,11 @@ public final class PolyQuest implements ModInitializer {
 
         DataResourceLoader.get().registerReloadListener(
                 id("quests"),
-                registries -> new QuestReloadListener(registries, CATALOGS));
+                registries -> new QuestReloadListener(registries, CATALOGS)
+        );
 
         FabricQuestEvents.register();
-        QuestCommands.register();
+        PolyQuestCommands.registerCommands();
 
         LOGGER.info("PolyQuest initialized");
     }

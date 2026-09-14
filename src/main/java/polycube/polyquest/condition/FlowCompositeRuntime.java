@@ -7,6 +7,7 @@ import polycube.polyquest.signal.QuestSignal;
 
 /// Repetition, ordering, and deadline-oriented composite runtime nodes.
 final class FlowCompositeRuntime {
+    /// Repeats a child condition a fixed number of times, counting each completion as progress.
     static final class RepeatInstance implements ConditionRuntime.Instance {
         private final CompositeConditions.Repeat definition;
         private final ConditionRuntime.CreationContext creationContext;
@@ -72,8 +73,7 @@ final class FlowCompositeRuntime {
             if (completedIterations == definition.times() - 1) {
                 return child.prepareClaim(context);
             }
-            return ConditionRuntime.ClaimPreparation.blocked(
-                    "Repeat condition requires more event-driven iterations");
+            return ConditionRuntime.ClaimPreparation.blocked("Repeat condition requires more event-driven iterations");
         }
 
         @Override
@@ -94,8 +94,8 @@ final class FlowCompositeRuntime {
         }
     }
 
-    static final class SequenceInstance
-            extends CompositeRuntimeSupport.ChildrenInstance<CompositeConditions.Sequence> {
+    /// Executes a list of child conditions in order, moving to the next only after the current is complete.
+    static final class SequenceInstance extends CompositeRuntimeSupport.ChildrenInstance<CompositeConditions.Sequence> {
         private int index;
 
         SequenceInstance(CompositeConditions.Sequence definition, ConditionRuntime.CreationContext context) {
@@ -181,6 +181,7 @@ final class FlowCompositeRuntime {
         }
     }
 
+    /// Starts a child condition and enforces a time window for its completion.
     static final class TimeWindowInstance implements ConditionRuntime.Instance {
         private final CompositeConditions.TimeWindow definition;
         private final ConditionRuntime.Instance child;
@@ -334,6 +335,5 @@ final class FlowCompositeRuntime {
         }
     }
 
-    private FlowCompositeRuntime() {
-    }
+    private FlowCompositeRuntime() {}
 }

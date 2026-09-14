@@ -9,8 +9,6 @@ import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
-import org.jspecify.annotations.Nullable;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.persistence.QuestLedger;
 import polycube.polyquest.resource.QuestCatalogManager;

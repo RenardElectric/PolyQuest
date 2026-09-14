@@ -10,6 +10,7 @@ import polycube.polyquest.signal.QuestSignal;
 
 /// Concurrent, threshold, optional, and branching composite runtime nodes.
 final class LogicalCompositeRuntime {
+    /// A composite condition that is satisfied when any child is satisfied.
     static final class AllOfInstance extends CompositeRuntimeSupport.ChildrenInstance<CompositeConditions.AllOf> {
         AllOfInstance(CompositeConditions.AllOf definition, ConditionRuntime.CreationContext context) {
             super(definition, definition.children(), context);
@@ -36,6 +37,7 @@ final class LogicalCompositeRuntime {
         }
     }
 
+    /// A composite condition that is satisfied when any child is satisfied.
     static final class AnyOfInstance extends CompositeRuntimeSupport.ChildrenInstance<CompositeConditions.AnyOf> {
         AnyOfInstance(CompositeConditions.AnyOf definition, ConditionRuntime.CreationContext context) {
             super(definition, definition.children(), context);
@@ -85,6 +87,7 @@ final class LogicalCompositeRuntime {
         }
     }
 
+    /// A composite condition that is satisfied when a threshold of children are satisfied.
     static final class NOfMInstance extends CompositeRuntimeSupport.ChildrenInstance<CompositeConditions.NOfM> {
         NOfMInstance(CompositeConditions.NOfM definition, ConditionRuntime.CreationContext context) {
             super(definition, definition.children(), context);
@@ -145,6 +148,7 @@ final class LogicalCompositeRuntime {
         }
     }
 
+    /// A composite condition that is satisfied when its child is satisfied, but does not require it to be satisfied.
     static final class OptionalInstance implements ConditionRuntime.Instance {
         private final CompositeConditions.OptionalChild definition;
         private final ConditionRuntime.Instance child;
@@ -197,6 +201,7 @@ final class LogicalCompositeRuntime {
         }
     }
 
+    /// A composite condition that is satisfied when any child is satisfied.
     static final class ChoiceInstance implements ConditionRuntime.Instance {
         private final CompositeConditions.Choice definition;
         private final List<ConditionRuntime.Instance> branches;
@@ -268,8 +273,8 @@ final class LogicalCompositeRuntime {
             if (selected >= 0) {
                 return branches.get(selected).prepareClaim(context);
             }
-            for (int index = 0; index < branches.size(); index++) {
-                ConditionRuntime.ClaimPreparation preparation = branches.get(index).prepareClaim(context);
+            for (ConditionRuntime.Instance branch : branches) {
+                ConditionRuntime.ClaimPreparation preparation = branch.prepareClaim(context);
                 if (preparation.ready()) {
                     return preparation;
                 }

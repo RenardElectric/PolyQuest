@@ -1,5 +1,7 @@
 package polycube.polyquest.commands;
 
+import java.util.List;
+import java.util.Objects;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
@@ -9,27 +11,43 @@ import net.minecraft.commands.Commands;
 import org.jspecify.annotations.Nullable;
 import polycube.polyquest.PolyQuest;
 
-import java.util.Objects;
-
 public final class PolyQuestCommands {
-    private static PolyQuestCommand @Nullable [] commands;
+    private static @Nullable List<PolyQuestCommand> commands;
 
     private PolyQuestCommands() {}
 
-    public static void registerCommands(PolyQuestCommand... commands) {
-        PolyQuestCommands.commands = commands;
+    /// Registers PolyQuest's complete built-in command set.
+    public static void registerCommands() {
+        registerCommandList(builtInCommands());
+    }
+
+    private static void registerCommandList(List<PolyQuestCommand> commands) {
+        List<PolyQuestCommand> registeredCommands = List.copyOf(commands);
+        PolyQuestCommands.commands = registeredCommands;
         CommandRegistrationCallback.EVENT.register((dispatcher, buildContext, _) -> {
             var baseCommand = Commands.literal(PolyQuest.MOD_ID);
             baseCommand.executes(context -> printModInfo(context.getSource()));
-            for (PolyQuestCommand command : commands) {
+            for (PolyQuestCommand command : registeredCommands) {
                 for (var commandAlias : command.getCommands(buildContext)) {
                     baseCommand.then(commandAlias);
                     if (command.hasQuickAlias()) dispatcher.register(commandAlias);
                 }
             }
             dispatcher.register(baseCommand);
-            PolyQuest.LOGGER.debug("Registered {} PolyCoin subcommand(s)", commands.length);
+            PolyQuest.LOGGER.debug("Registered {} PolyQuest subcommand(s)", registeredCommands.size());
         });
+    }
+
+    static List<PolyQuestCommand> builtInCommands() {
+        return List.of(
+                new HelpCommand(),
+                new ListCommand(),
+                new ClaimCommand(),
+                new InspectCommand(),
+                new SignalCommand(),
+                new RerollCommand(),
+                new ResetCommand()
+        );
     }
 
     public static int printModInfo(CommandSourceStack cst) {
@@ -38,7 +56,7 @@ public final class PolyQuestCommands {
                 .map(ModContainer::getMetadata);
 
         if (optionalModData.isEmpty()) {
-            PolyQuest.LOGGER.warn("Could not find PolyCoin metadata while handling the base command");
+            PolyQuest.LOGGER.warn("Could not find PolyQuest metadata while handling the base command");
             cst.sendFailure(CommandText.error("Could not fetch mod information."));
             return 0;
         }
@@ -56,7 +74,7 @@ public final class PolyQuestCommands {
         return 1;
     }
 
-    public static PolyQuestCommand[] getCommands() {
-        return Objects.requireNonNull(commands, "PolyCoin commands are unavailable before registration");
+    public static List<PolyQuestCommand> getCommands() {
+        return Objects.requireNonNull(commands, "PolyQuest commands are unavailable before registration");
     }
 }

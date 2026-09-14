@@ -36,25 +36,34 @@ public final class ConditionRuntime {
         }
     }
 
+    /// Represents a mutable condition instance that can respond to signals, tick, and prepare claim operations.
     public interface Instance {
+        /// Returns the immutable definition that this instance was created from.
         ConditionApi.Definition definition();
 
+        /// Updates the instance state based on a signal and returns an update summary.
         Update onSignal(QuestSignal signal, EvaluationContext context);
 
+        /// Updates the instance state based on a tick and returns an update summary.
         default Update tick(EvaluationContext context) {
             return Update.NONE;
         }
 
+        /// Returns true if the condition is completed and no further progress is possible.
         boolean completed();
 
+        /// Returns true if the condition is exhausted and no further progress is possible.
         default boolean exhausted() {
             return false;
         }
 
+        /// Prepares claim operations for this condition, returning a ClaimPreparation that indicates readiness or blockage.
         ClaimPreparation prepareClaim(ClaimContext context);
 
+        /// Resets the instance state to its initial state, allowing it to be reused.
         void reset();
 
+        /// Returns a diagnostic JSON object representing the current state of the instance.
         default JsonObject diagnostic() {
             JsonObject result = new JsonObject();
             result.addProperty("completed", completed());

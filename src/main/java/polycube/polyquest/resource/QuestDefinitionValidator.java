@@ -99,7 +99,7 @@ public final class QuestDefinitionValidator {
             case CompositeConditions.Sequence value -> {
                 validateChildren(value.children(), path, true, errors);
                 for (int index = 0; index + 1 < value.children().size(); index++) {
-                    if (!canCompleteFromSignals(value.children().get(index))) {
+                    if (!ConditionApi.capabilities(value.children().get(index)).canCompleteFromSignals()) {
                         errors.add(path + ".children[" + index + "]: a claim-time condition can only be the final sequence step");
                     }
                 }
@@ -112,11 +112,15 @@ public final class QuestDefinitionValidator {
             }
             case CompositeConditions.Repeat value -> {
                 if (value.times() <= 0) errors.add(path + ": times must be positive");
-                if (!canCompleteFromSignals(value.child())) errors.add(path + ": repeat cannot contain a claim-time-only condition");
+                if (!ConditionApi.capabilities(value.child()).canCompleteFromSignals()) {
+                    errors.add(path + ": repeat cannot contain a claim-time-only condition");
+                }
                 validateCondition(value.child(), path + ".child", errors);
             }
             case CompositeConditions.OptionalChild value -> {
-                if (containsClaimCost(value.child())) errors.add(path + ": optional conditions cannot contain claim-time costs");
+                if (ConditionApi.capabilities(value.child()).containsClaimCost()) {
+                    errors.add(path + ": optional conditions cannot contain claim-time costs");
+                }
                 validateCondition(value.child(), path + ".child", errors);
             }
             case CompositeConditions.Choice value -> {
@@ -143,10 +147,11 @@ public final class QuestDefinitionValidator {
                 }
                 if (value.startPolicy() == CompositeConditions.StartPolicy.START_CONDITION
                         && value.startCondition().isPresent()
-                        && !canCompleteFromSignals(value.startCondition().get())) {
+                        && !ConditionApi.capabilities(value.startCondition().get()).canCompleteFromSignals()) {
                     errors.add(path + ": start_condition must be completable from quest signals");
                 }
-                if (value.startPolicy() == CompositeConditions.StartPolicy.FIRST_PROGRESS && !canProgressFromSignals(value.child())) {
+                if (value.startPolicy() == CompositeConditions.StartPolicy.FIRST_PROGRESS
+                        && !ConditionApi.capabilities(value.child()).canProgressFromSignals()) {
                     errors.add(path + ": first_progress requires a child that can receive event progress");
                 }
                 validateCondition(value.child(), path + ".child", errors);
@@ -164,53 +169,4 @@ public final class QuestDefinitionValidator {
         }
     }
 
-    /// Checks whether a condition tree can finish without a claim-time-only operation.
-    private boolean canCompleteFromSignals(ConditionApi.Definition definition) {
-        return switch (definition) {
-            case BuiltInConditions.ConsumeItems _ -> false;
-            case CompositeConditions.AllOf(List<ConditionApi.Definition> children) -> children.stream().allMatch(this::canCompleteFromSignals);
-            case CompositeConditions.AnyOf(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::canCompleteFromSignals);
-            case CompositeConditions.NOfM(int required, List<ConditionApi.Definition> children) -> children.stream().filter(this::canCompleteFromSignals).count() >= required;
-            case CompositeConditions.Repeat value -> canCompleteFromSignals(value.child());
-            case CompositeConditions.Sequence(List<ConditionApi.Definition> children) -> children.stream().allMatch(this::canCompleteFromSignals);
-            case CompositeConditions.TimeWindow value -> canCompleteFromSignals(value.child());
-            case CompositeConditions.Choice(List<CompositeConditions.Branch> branches) -> branches.stream().anyMatch(branch -> canCompleteFromSignals(branch.condition()));
-            default -> true;
-        };
-    }
-
-    /// Checks whether a signal can produce the first meaningful progress in this tree.
-    private boolean canProgressFromSignals(ConditionApi.Definition definition) {
-        return switch (definition) {
-            case BuiltInConditions.ConsumeItems _ -> false;
-            case CompositeConditions.AllOf(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::canProgressFromSignals);
-            case CompositeConditions.AnyOf(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::canProgressFromSignals);
-            case CompositeConditions.NOfM value -> value.children().stream().anyMatch(this::canProgressFromSignals);
-            case CompositeConditions.Repeat value -> canProgressFromSignals(value.child());
-            case CompositeConditions.Sequence(List<ConditionApi.Definition> children) -> !children.isEmpty() && canProgressFromSignals(children.getFirst());
-            case CompositeConditions.TimeWindow value ->
-                    value.startPolicy() == CompositeConditions.StartPolicy.START_CONDITION
-                            ? value.startCondition().map(this::canProgressFromSignals).orElse(false)
-                            : canProgressFromSignals(value.child());
-            case CompositeConditions.OptionalChild(ConditionApi.Definition child) -> canProgressFromSignals(child);
-            case CompositeConditions.Choice(List<CompositeConditions.Branch> branches) -> branches.stream().anyMatch(branch -> canProgressFromSignals(branch.condition()));
-            default -> true;
-        };
-    }
-
-    /// Finds item-consumption costs anywhere below a composite condition.
-    private boolean containsClaimCost(ConditionApi.Definition definition) {
-        return switch (definition) {
-            case BuiltInConditions.ConsumeItems _ -> true;
-            case CompositeConditions.AllOf(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::containsClaimCost);
-            case CompositeConditions.AnyOf(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::containsClaimCost);
-            case CompositeConditions.NOfM value -> value.children().stream().anyMatch(this::containsClaimCost);
-            case CompositeConditions.Sequence(List<ConditionApi.Definition> children) -> children.stream().anyMatch(this::containsClaimCost);
-            case CompositeConditions.Repeat value -> containsClaimCost(value.child());
-            case CompositeConditions.TimeWindow value -> containsClaimCost(value.child()) || value.startCondition().map(this::containsClaimCost).orElse(false);
-            case CompositeConditions.OptionalChild(ConditionApi.Definition child) -> containsClaimCost(child);
-            case CompositeConditions.Choice(List<CompositeConditions.Branch> branches) -> branches.stream().anyMatch(branch -> containsClaimCost(branch.condition()));
-            default -> false;
-        };
-    }
 }

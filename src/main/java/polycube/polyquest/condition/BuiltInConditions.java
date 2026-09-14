@@ -1,5 +1,9 @@
 package polycube.polyquest.condition;
 
+import static polycube.polyquest.condition.ConditionApi.Capabilities.CLAIM_TIME_COST;
+import static polycube.polyquest.condition.ConditionApi.Capabilities.SIGNAL_DRIVEN;
+import static polycube.polyquest.condition.ConditionApi.Semantics.constant;
+
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -15,13 +19,15 @@ import polycube.polyquest.PolyQuest;
 /// Datapack definitions for PolyQuest's vanilla-predicate-backed atomic conditions.
 /// Mutable player state is kept separately in {@link BuiltInConditionRuntime}.
 public final class BuiltInConditions {
+    /// Consumes a specified number of items from the player's inventory.
     public record ConsumeItems(ItemPredicate item, int count) implements ConditionApi.Definition {
         public static final MapCodec<ConsumeItems> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 ItemPredicate.CODEC.fieldOf("item").forGetter(ConsumeItems::item),
                 Codec.INT.fieldOf("count").forGetter(ConsumeItems::count)
         ).apply(instance, ConsumeItems::new));
         public static final ConditionApi.Type<ConsumeItems> TYPE = new ConditionApi.Type<>(
-                PolyQuest.id("consume_items"), CODEC, BuiltInConditionRuntime.ConsumeItemsInstance::new);
+                PolyQuest.id("consume_items"), CODEC,
+                BuiltInConditionRuntime.ConsumeItemsInstance::new, constant(CLAIM_TIME_COST));
 
         @Override
         public ConditionApi.Type<ConsumeItems> type() {
@@ -29,13 +35,15 @@ public final class BuiltInConditions {
         }
     }
 
+    /// Catches a specified number of fish matching the given predicate.
     public record FishItem(ItemPredicate item, int count) implements ConditionApi.Definition {
         public static final MapCodec<FishItem> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 ItemPredicate.CODEC.fieldOf("item").forGetter(FishItem::item),
                 Codec.INT.optionalFieldOf("count", 1).forGetter(FishItem::count)
         ).apply(instance, FishItem::new));
         public static final ConditionApi.Type<FishItem> TYPE = new ConditionApi.Type<>(
-                PolyQuest.id("fish_item"), CODEC, BuiltInConditionRuntime.FishItemInstance::new);
+                PolyQuest.id("fish_item"), CODEC,
+                BuiltInConditionRuntime.FishItemInstance::new, constant(SIGNAL_DRIVEN));
 
         @Override
         public ConditionApi.Type<FishItem> type() {
@@ -43,6 +51,7 @@ public final class BuiltInConditions {
         }
     }
 
+    /// Kills a specified number of entities, optionally filtered by damage source.
     public record KillEntity(
             EntityPredicate victim,
             Optional<DamageSourcePredicate> damageSource,
@@ -53,7 +62,8 @@ public final class BuiltInConditions {
                 Codec.INT.optionalFieldOf("count", 1).forGetter(KillEntity::count)
         ).apply(instance, KillEntity::new));
         public static final ConditionApi.Type<KillEntity> TYPE = new ConditionApi.Type<>(
-                PolyQuest.id("kill_entity"), CODEC, BuiltInConditionRuntime.KillEntityInstance::new);
+                PolyQuest.id("kill_entity"), CODEC,
+                BuiltInConditionRuntime.KillEntityInstance::new, constant(SIGNAL_DRIVEN));
 
         @Override
         public ConditionApi.Type<KillEntity> type() {
@@ -61,6 +71,7 @@ public final class BuiltInConditions {
         }
     }
 
+    /// Breaks a specified number of blocks, optionally filtered by tool used.
     public record BreakBlock(
             BlockPredicate block,
             Optional<ItemPredicate> tool,
@@ -71,7 +82,8 @@ public final class BuiltInConditions {
                 Codec.INT.optionalFieldOf("count", 1).forGetter(BreakBlock::count)
         ).apply(instance, BreakBlock::new));
         public static final ConditionApi.Type<BreakBlock> TYPE = new ConditionApi.Type<>(
-                PolyQuest.id("break_block"), CODEC, BuiltInConditionRuntime.BreakBlockInstance::new);
+                PolyQuest.id("break_block"), CODEC,
+                BuiltInConditionRuntime.BreakBlockInstance::new, constant(SIGNAL_DRIVEN));
 
         @Override
         public ConditionApi.Type<BreakBlock> type() {
@@ -79,6 +91,7 @@ public final class BuiltInConditions {
         }
     }
 
+    /// Visits a location matching the given predicate for a specified number of continuous ticks.
     public record VisitLocation(LocationPredicate location, int continuousTicks)
             implements ConditionApi.Definition {
         public static final MapCodec<VisitLocation> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -86,7 +99,8 @@ public final class BuiltInConditions {
                 Codec.INT.optionalFieldOf("continuous_ticks", 1).forGetter(VisitLocation::continuousTicks)
         ).apply(instance, VisitLocation::new));
         public static final ConditionApi.Type<VisitLocation> TYPE = new ConditionApi.Type<>(
-                PolyQuest.id("visit_location"), CODEC, BuiltInConditionRuntime.VisitLocationInstance::new);
+                PolyQuest.id("visit_location"), CODEC,
+                BuiltInConditionRuntime.VisitLocationInstance::new, constant(SIGNAL_DRIVEN));
 
         @Override
         public ConditionApi.Type<VisitLocation> type() {
@@ -94,13 +108,14 @@ public final class BuiltInConditions {
         }
     }
 
-    public record PlayerDeath(Optional<DamageSourcePredicate> damageSource)
-            implements ConditionApi.Definition {
+    /// Triggers when the player dies, optionally filtered by damage source.
+    public record PlayerDeath(Optional<DamageSourcePredicate> damageSource) implements ConditionApi.Definition {
         public static final MapCodec<PlayerDeath> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 DamageSourcePredicate.CODEC.optionalFieldOf("damage_source").forGetter(PlayerDeath::damageSource)
         ).apply(instance, PlayerDeath::new));
         public static final ConditionApi.Type<PlayerDeath> TYPE = new ConditionApi.Type<>(
-                PolyQuest.id("player_death"), CODEC, BuiltInConditionRuntime.PlayerDeathInstance::new);
+                PolyQuest.id("player_death"), CODEC,
+                BuiltInConditionRuntime.PlayerDeathInstance::new, constant(SIGNAL_DRIVEN));
 
         @Override
         public ConditionApi.Type<PlayerDeath> type() {
@@ -108,12 +123,14 @@ public final class BuiltInConditions {
         }
     }
 
+    /// Triggers when the player obtains a specified advancement.
     public record ObtainAdvancement(Identifier advancement) implements ConditionApi.Definition {
         public static final MapCodec<ObtainAdvancement> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 Identifier.CODEC.fieldOf("advancement").forGetter(ObtainAdvancement::advancement)
         ).apply(instance, ObtainAdvancement::new));
         public static final ConditionApi.Type<ObtainAdvancement> TYPE = new ConditionApi.Type<>(
-                PolyQuest.id("obtain_advancement"), CODEC, BuiltInConditionRuntime.ObtainAdvancementInstance::new);
+                PolyQuest.id("obtain_advancement"), CODEC,
+                BuiltInConditionRuntime.ObtainAdvancementInstance::new, constant(SIGNAL_DRIVEN));
 
         @Override
         public ConditionApi.Type<ObtainAdvancement> type() {
@@ -121,13 +138,15 @@ public final class BuiltInConditions {
         }
     }
 
+    /// Triggers when a specified redstone signal is received, optionally filtered by count.
     public record ExplicitSignal(Identifier signal, int count) implements ConditionApi.Definition {
         public static final MapCodec<ExplicitSignal> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 Identifier.CODEC.fieldOf("signal").forGetter(ExplicitSignal::signal),
                 Codec.INT.optionalFieldOf("count", 1).forGetter(ExplicitSignal::count)
         ).apply(instance, ExplicitSignal::new));
         public static final ConditionApi.Type<ExplicitSignal> TYPE = new ConditionApi.Type<>(
-                PolyQuest.id("explicit_signal"), CODEC, BuiltInConditionRuntime.ExplicitSignalInstance::new);
+                PolyQuest.id("explicit_signal"), CODEC,
+                BuiltInConditionRuntime.ExplicitSignalInstance::new, constant(SIGNAL_DRIVEN));
 
         @Override
         public ConditionApi.Type<ExplicitSignal> type() {
@@ -135,12 +154,11 @@ public final class BuiltInConditions {
         }
     }
 
+    /// Triggers when the player falls uninterrupted from a specified start location to a specified end location, with optional rules for how the fall is handled.
     public record UninterruptedFall(
-            LocationPredicate start,
-            LocationPredicate end,
-            double minimumDistance,
-            boolean requireSurvival,
-            FallRules rules) implements ConditionApi.Definition {
+            LocationPredicate start, LocationPredicate end,
+            double minimumDistance, boolean requireSurvival, FallRules rules
+    ) implements ConditionApi.Definition {
         public static final MapCodec<UninterruptedFall> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 LocationPredicate.CODEC.fieldOf("start").forGetter(UninterruptedFall::start),
                 LocationPredicate.CODEC.fieldOf("end").forGetter(UninterruptedFall::end),
@@ -149,7 +167,8 @@ public final class BuiltInConditions {
                 FallRules.CODEC.optionalFieldOf("rules", FallRules.DEFAULT).forGetter(UninterruptedFall::rules)
         ).apply(instance, UninterruptedFall::new));
         public static final ConditionApi.Type<UninterruptedFall> TYPE = new ConditionApi.Type<>(
-                PolyQuest.id("uninterrupted_fall"), CODEC, BuiltInConditionRuntime.UninterruptedFallInstance::new);
+                PolyQuest.id("uninterrupted_fall"), CODEC,
+                BuiltInConditionRuntime.UninterruptedFallInstance::new, constant(SIGNAL_DRIVEN));
 
         @Override
         public ConditionApi.Type<UninterruptedFall> type() {
@@ -157,13 +176,11 @@ public final class BuiltInConditions {
         }
     }
 
+    /// Rules for how an uninterrupted fall is handled, including whether certain types of movement are allowed and the threshold distance for teleportation.
     public record FallRules(
-            boolean allowWater,
-            boolean allowLava,
-            boolean allowClimbing,
-            boolean allowElytra,
-            boolean allowVehicles,
-            double teleportThreshold) {
+            boolean allowWater, boolean allowLava, boolean allowClimbing,
+            boolean allowElytra, boolean allowVehicles, double teleportThreshold
+    ) {
         public static final FallRules DEFAULT = new FallRules(false, false, false, false, false, 16.0);
         public static final Codec<FallRules> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.BOOL.optionalFieldOf("allow_water", false).forGetter(FallRules::allowWater),
@@ -187,6 +204,5 @@ public final class BuiltInConditions {
         ConditionApi.register(UninterruptedFall.TYPE);
     }
 
-    private BuiltInConditions() {
-    }
+    private BuiltInConditions() {}
 }

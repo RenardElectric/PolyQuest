@@ -35,8 +35,7 @@ public final class QuestClaimService {
 
     /// Runs the normal claim transaction and checkpoints each stage for safe reward retries.
     public ClaimResult claim(ServerPlayer player, Identifier questId) {
-        Optional<QuestModel.Occurrence> occurrenceResult =
-                engine.findOccurrence(player.getUUID(), questId);
+        Optional<QuestModel.Occurrence> occurrenceResult = engine.findOccurrence(player.getUUID(), questId);
         if (occurrenceResult.isEmpty()) {
             return ClaimResult.failure("That quest is not currently available");
         }
@@ -53,8 +52,7 @@ public final class QuestClaimService {
         }
 
         QuestAttempt attempt = engine.attempt(player.getUUID(), occurrence);
-        ConditionRuntime.ClaimPreparation preparation = attempt.prepareClaim(
-                new QuestAttempt.ServerPlayerContext(server, player, server.getTickCount()));
+        ConditionRuntime.ClaimPreparation preparation = attempt.prepareClaim(new QuestAttempt.ServerPlayerContext(server, player, server.getTickCount()));
         if (!preparation.ready()) {
             return ClaimResult.failure(preparation.failure());
         }
@@ -65,8 +63,7 @@ public final class QuestClaimService {
         }
 
         for (ConditionRuntime.ClaimOperation operation : preparation.operations()) {
-            if (!operation.revalidate(new ConditionRuntime.ClaimContext(
-                    server, player, server.getTickCount()))) {
+            if (!operation.revalidate(new ConditionRuntime.ClaimContext(server, player, server.getTickCount()))) {
                 return ClaimResult.failure("Claim requirements changed: " + operation.describe());
             }
         }
@@ -183,7 +180,8 @@ public final class QuestClaimService {
     /// Grants rewards from the durable cursor and checkpoints after every successful grant.
     private ClaimResult grantRemaining(
             QuestLedger.PendingTransaction transaction,
-            ServerPlayer onlinePlayer) {
+            ServerPlayer player
+    ) {
         while (transaction.nextReward() < transaction.rewards().size()) {
             int rewardIndex = transaction.nextReward();
             RewardApi.Definition reward = transaction.rewards().get(rewardIndex);
@@ -192,15 +190,13 @@ public final class QuestClaimService {
                 grant = RewardApi.grant(
                         reward,
                         new RewardApi.Context(
-                                server,
-                                transaction.playerId(),
-                                onlinePlayer,
-                                transaction.id() + ":" + rewardIndex));
+                                server, transaction.playerId(), player,
+                                transaction.id() + ":" + rewardIndex
+                        )
+                );
             } catch (RuntimeException exception) {
                 String message = "Reward threw an exception; transaction requires administrator review";
-                PolyQuest.LOGGER.error(
-                        "Reward {} failed unexpectedly in quest transaction {}",
-                        reward.type().id(), transaction.id(), exception);
+                PolyQuest.LOGGER.error("Reward {} failed unexpectedly in quest transaction {}", reward.type().id(), transaction.id(), exception);
                 ledger.markFailed(transaction, message);
                 return new ClaimResult(ClaimState.FAILURE, message);
             }
@@ -229,6 +225,7 @@ public final class QuestClaimService {
         }
     }
 
+    /// Durable state of a claim transaction, including the reward grant result.
     public enum ClaimState {
         SUCCESS,
         PENDING,
@@ -236,6 +233,7 @@ public final class QuestClaimService {
         FAILURE
     }
 
+    /// Result of a claim attempt, including the durable state of the transaction.
     public record ClaimResult(ClaimState state, String message) {
         public static ClaimResult failure(String message) {
             return new ClaimResult(ClaimState.FAILURE, message);

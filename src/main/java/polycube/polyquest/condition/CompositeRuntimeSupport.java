@@ -8,8 +8,8 @@ import polycube.polyquest.runtime.ConditionRuntime;
 
 /// Shared tree plumbing for composite runtime nodes.
 final class CompositeRuntimeSupport {
-    abstract static class ChildrenInstance<D extends ConditionApi.Definition>
-            implements ConditionRuntime.Instance {
+    /// Base class for composite condition instances that manage child instances.
+    abstract static class ChildrenInstance<D extends ConditionApi.Definition> implements ConditionRuntime.Instance {
         protected final D definition;
         protected final List<ConditionRuntime.Instance> children;
 
@@ -61,27 +61,20 @@ final class CompositeRuntimeSupport {
     }
 
     /// Flattens child claim operations only when every child is ready.
-    static ConditionRuntime.ClaimPreparation combine(
-            List<ConditionRuntime.ClaimPreparation> preparations) {
+    static ConditionRuntime.ClaimPreparation combine(List<ConditionRuntime.ClaimPreparation> preparations) {
         List<ConditionRuntime.ClaimOperation> operations = new ArrayList<>();
         for (ConditionRuntime.ClaimPreparation preparation : preparations) {
-            if (!preparation.ready()) {
-                return preparation;
-            }
+            if (!preparation.ready()) return preparation;
             operations.addAll(preparation.operations());
         }
         return ConditionRuntime.ClaimPreparation.readyPrep(operations);
     }
 
-    static List<ConditionApi.Definition> requireChildren(
-            List<ConditionApi.Definition> children,
-            String type) {
-        if (children.isEmpty()) {
-            throw new IllegalArgumentException(type + " requires at least one child");
-        }
+    /// Ensures that a composite definition has at least one child.
+    static List<ConditionApi.Definition> requireChildren(List<ConditionApi.Definition> children, String type) {
+        if (children.isEmpty()) throw new IllegalArgumentException(type + " requires at least one child");
         return children;
     }
 
-    private CompositeRuntimeSupport() {
-    }
+    private CompositeRuntimeSupport() {}
 }

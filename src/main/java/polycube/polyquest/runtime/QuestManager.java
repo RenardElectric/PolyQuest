@@ -1,9 +1,11 @@
 package polycube.polyquest.runtime;
 
 import java.util.List;
+
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
 import polycube.polyquest.claim.QuestClaimService;
 import polycube.polyquest.config.QuestConfig;
 import polycube.polyquest.model.QuestModel;
@@ -78,8 +80,11 @@ public final class QuestManager {
         engine.onSignal(signal);
     }
 
-    public boolean reroll(QuestModel.Difficulty difficulty) {
-        boolean changed = rotation.reroll(difficulty, catalogs.current(), ledger);
+    public boolean reroll(List<QuestModel.Difficulty> difficulties) {
+        boolean changed = false;
+        for (var difficulty : difficulties) {
+            changed |= rotation.reroll(difficulty, catalogs.current(), ledger);
+        }
         if (changed) {
             engine.rotationChanged();
             announceRotation();
@@ -101,12 +106,14 @@ public final class QuestManager {
         ledger.flush();
     }
 
-    public List<QuestModel.Occurrence> available(ServerPlayer player) {
-        return engine.available(player.getUUID());
+    /// Returns the list of quests currently available to the given player.
+    public List<QuestModel.Occurrence> available(NameAndId player) {
+        return engine.available(player.id());
     }
 
-    public QuestAttempt attempt(ServerPlayer player, QuestModel.Occurrence occurrence) {
-        return engine.attempt(player.getUUID(), occurrence);
+    /// Returns the current attempt state for the given player and quest occurrence.
+    public QuestAttempt attempt(NameAndId player, QuestModel.Occurrence occurrence) {
+        return engine.attempt(player.id(), occurrence);
     }
 
     /// Synchronizes changed daily occurrences into the engine and handles their configured announcement.

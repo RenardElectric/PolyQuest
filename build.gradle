@@ -20,7 +20,10 @@ loom {
         }
     }
 
-    runs.configureEach { preferGradleTask.set(true) }
+    runs.configureEach {
+        jvmArguments.add("-XX:+AllowEnhancedClassRedefinition")
+        preferGradleTask.set(true)
+    }
 }
 
 dependencies {

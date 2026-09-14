@@ -79,12 +79,7 @@ public final class QuestModel {
         ).apply(instance, Body::new));
 
         public Body {
-            Objects.requireNonNull(availability, "availability");
-            Objects.requireNonNull(difficulty, "difficulty");
-            Objects.requireNonNull(title, "title");
             description = List.copyOf(description);
-            Objects.requireNonNull(condition, "condition");
-            Objects.requireNonNull(rewards, "rewards");
         }
     }
 
@@ -94,15 +89,7 @@ public final class QuestModel {
             RewardApi.Plan rewards, String behaviorHash, String presentationHash
     ) {
         public Definition {
-            Objects.requireNonNull(id, "id");
-            Objects.requireNonNull(availability, "availability");
-            Objects.requireNonNull(difficulty, "difficulty");
-            Objects.requireNonNull(title, "title");
             description = List.copyOf(description);
-            Objects.requireNonNull(condition, "condition");
-            Objects.requireNonNull(rewards, "rewards");
-            Objects.requireNonNull(behaviorHash, "behaviorHash");
-            Objects.requireNonNull(presentationHash, "presentationHash");
         }
 
         public static Definition fromBody(Identifier id, Body body, String behaviorHash, String presentationHash) {
@@ -116,22 +103,9 @@ public final class QuestModel {
 
     /// One appearance of a definition. Daily occurrences are scoped to a date and slot;
     /// unique occurrences are scoped only to their current behavior revision.
-    public record Occurrence(Key key, Definition definition, Instant availableFrom, Optional<Instant> availableUntil) {
-        public Occurrence {
-            Objects.requireNonNull(key, "key");
-            Objects.requireNonNull(definition, "definition");
-            Objects.requireNonNull(availableFrom, "availableFrom");
-            Objects.requireNonNull(availableUntil, "availableUntil");
-        }
-    }
+    public record Occurrence(Key key, Definition definition, Instant availableFrom, Optional<Instant> availableUntil) {}
 
     public record Key(Identifier questId, String behaviorHash, Scope scope) {
-        public Key {
-            Objects.requireNonNull(questId, "questId");
-            Objects.requireNonNull(behaviorHash, "behaviorHash");
-            Objects.requireNonNull(scope, "scope");
-        }
-
         public String persistentKey() {
             return questId + "|" + behaviorHash + "|" + scope.serialized();
         }
@@ -142,11 +116,6 @@ public final class QuestModel {
     }
 
     public record DailyScope(LocalDate date, Difficulty slot, int generation) implements Scope {
-        public DailyScope {
-            Objects.requireNonNull(date, "date");
-            Objects.requireNonNull(slot, "slot");
-        }
-
         @Override
         public String serialized() {
             return "daily:" + date + ':' + slot.getSerializedName() + ':' + generation;
@@ -186,7 +155,6 @@ public final class QuestModel {
 
     public record DailyAssignment(LocalDate date, Map<Difficulty, Occurrence> slots) {
         public DailyAssignment {
-            Objects.requireNonNull(date, "date");
             EnumMap<Difficulty, Occurrence> copy = new EnumMap<>(Difficulty.class);
             copy.putAll(slots);
             slots = Map.copyOf(copy);

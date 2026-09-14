@@ -1,9 +1,16 @@
 package polycube.polyquest.condition;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.mojang.serialization.JsonOps;
+import net.minecraft.advancements.predicates.DamageSourcePredicate;
 import net.minecraft.advancements.predicates.ItemPredicate;
+import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -18,6 +25,7 @@ import polycube.polyquest.signal.QuestSignal;
 
 /// Mutable implementations for the immutable definitions in {@link BuiltInConditions}.
 final class BuiltInConditionRuntime {
+    /// A base class for conditions that track a boolean completion state.
     private abstract static class BaseInstance<D extends ConditionApi.Definition> implements ConditionRuntime.Instance {
         protected final D definition;
         protected boolean completed;
@@ -49,6 +57,7 @@ final class BuiltInConditionRuntime {
         }
     }
 
+    /// A base class for conditions that track a numeric count of progress toward completion.
     private abstract static class CounterInstance<D extends ConditionApi.Definition> extends BaseInstance<D> {
         protected int current;
         private final int target;
@@ -85,6 +94,7 @@ final class BuiltInConditionRuntime {
         }
     }
 
+    /// A condition that completes when consuming a specific item from the player's inventory, optionally requiring a specific count.
     static final class ConsumeItemsInstance extends BaseInstance<BuiltInConditions.ConsumeItems> {
         ConsumeItemsInstance(BuiltInConditions.ConsumeItems definition, ConditionRuntime.CreationContext context) {
             super(definition, context);
@@ -103,11 +113,19 @@ final class BuiltInConditionRuntime {
             ItemConsumption operation = new ItemConsumption(definition.item(), definition.count());
             return operation.revalidate(context)
                     ? ConditionRuntime.ClaimPreparation.readyPrep(List.of(operation))
-                    : ConditionRuntime.ClaimPreparation.blocked(
-                            "Requires " + definition.count() + " matching item(s)");
+                    : ConditionRuntime.ClaimPreparation.blocked("Requires " + definition.count() + " matching item(s)");
+        }
+
+        @Override
+        public JsonObject diagnostic() {
+            JsonObject result = super.diagnostic();
+            result.addProperty("item", String.valueOf(definition.item().items().map(item -> item.stream().map(Holder::getRegisteredName).toList()).orElse(null)));
+            result.addProperty("count", definition.count());
+            return result;
         }
     }
 
+    /// A condition that completes when the player catches a specific item while fishing.
     static final class FishItemInstance extends CounterInstance<BuiltInConditions.FishItem> {
         FishItemInstance(BuiltInConditions.FishItem definition, ConditionRuntime.CreationContext context) {
             super(definition, context, definition.count());
@@ -126,8 +144,16 @@ final class BuiltInConditionRuntime {
             }
             return increment(matches);
         }
+
+        @Override
+        public JsonObject diagnostic() {
+            JsonObject result = super.diagnostic();
+            result.addProperty("item", String.valueOf(definition.item().items().map(item -> item.stream().map(Holder::getRegisteredName).toList()).orElse(null)));
+            return result;
+        }
     }
 
+    /// A condition that completes when the player kills a specific entity, optionally filtered by damage source.
     static final class KillEntityInstance extends CounterInstance<BuiltInConditions.KillEntity> {
         KillEntityInstance(BuiltInConditions.KillEntity definition, ConditionRuntime.CreationContext context) {
             super(definition, context, definition.count());
@@ -143,14 +169,14 @@ final class BuiltInConditionRuntime {
             if (!definition.victim().matches(level, origin, kill.victim())) {
                 return ConditionRuntime.Update.NONE;
             }
-            if (definition.damageSource().isPresent()
-                    && !definition.damageSource().get().matches(level, origin, kill.damageSource())) {
+            if (definition.damageSource().isPresent() && !definition.damageSource().get().matches(level, origin, kill.damageSource())) {
                 return ConditionRuntime.Update.NONE;
             }
             return increment(1);
         }
     }
 
+    /// A condition that completes when the player breaks a specific block, optionally filtered by a tool.
     static final class BreakBlockInstance extends CounterInstance<BuiltInConditions.BreakBlock> {
         BreakBlockInstance(BuiltInConditions.BreakBlock definition, ConditionRuntime.CreationContext context) {
             super(definition, context, definition.count());
@@ -161,8 +187,7 @@ final class BuiltInConditionRuntime {
             if (!(signal instanceof QuestSignal.BlockBroken broken)) {
                 return ConditionRuntime.Update.NONE;
             }
-            if (!definition.block().matchesState(broken.state())
-                    || !definition.block().matchesBlockEntity(broken.level(), broken.blockEntity())) {
+            if (!definition.block().matchesState(broken.state()) || !definition.block().matchesBlockEntity(broken.level(), broken.blockEntity())) {
                 return ConditionRuntime.Update.NONE;
             }
             if (definition.tool().isPresent() && !definition.tool().get().test(broken.tool())) {
@@ -170,8 +195,17 @@ final class BuiltInConditionRuntime {
             }
             return increment(1);
         }
+
+        @Override
+        public JsonObject diagnostic() {
+            JsonObject result = super.diagnostic();
+            result.addProperty("block", String.valueOf(definition.block().blocks().map(blocks -> blocks.stream().map(Holder::getRegisteredName).toList()).orElse(null)));
+            result.addProperty("tool", definition.tool().map(tool -> String.valueOf(tool.items().map(items -> items.stream().map(Holder::getRegisteredName).toList()).orElse(null))).orElse(null));
+            return result;
+        }
     }
 
+    /// A condition that completes when the player visits a specific location, optionally requiring continuous presence for a number of ticks.
     static final class VisitLocationInstance extends CounterInstance<BuiltInConditions.VisitLocation> {
         VisitLocationInstance(BuiltInConditions.VisitLocation definition, ConditionRuntime.CreationContext context) {
             super(definition, context, Math.max(1, definition.continuousTicks()));
@@ -193,8 +227,16 @@ final class BuiltInConditionRuntime {
             }
             return ConditionRuntime.Update.NONE;
         }
+
+        @Override
+        public JsonObject diagnostic() {
+            JsonObject result = super.diagnostic();
+            result.addProperty("continuous_ticks", definition.continuousTicks());
+            return result;
+        }
     }
 
+    /// A condition that completes when the player dies, optionally filtered by damage source.
     static final class PlayerDeathInstance extends BaseInstance<BuiltInConditions.PlayerDeath> {
         PlayerDeathInstance(BuiltInConditions.PlayerDeath definition, ConditionRuntime.CreationContext context) {
             super(definition, context);
@@ -206,9 +248,7 @@ final class BuiltInConditionRuntime {
                 return ConditionRuntime.Update.NONE;
             }
             ServerLevel level = death.player().level();
-            if (definition.damageSource().isPresent()
-                    && !definition.damageSource().get().matches(
-                            level, death.player().position(), death.damageSource())) {
+            if (definition.damageSource().isPresent() && !definition.damageSource().get().matches(level, death.player().position(), death.damageSource())) {
                 return ConditionRuntime.Update.NONE;
             }
             completed = true;
@@ -216,6 +256,7 @@ final class BuiltInConditionRuntime {
         }
     }
 
+    /// A condition that completes when the player obtains a specific advancement.
     static final class ObtainAdvancementInstance extends BaseInstance<BuiltInConditions.ObtainAdvancement> {
         ObtainAdvancementInstance(BuiltInConditions.ObtainAdvancement definition, ConditionRuntime.CreationContext context) {
             super(definition, context);
@@ -232,8 +273,16 @@ final class BuiltInConditionRuntime {
             completed = true;
             return ConditionRuntime.Update.changed(true);
         }
+
+        @Override
+        public JsonObject diagnostic() {
+            JsonObject result = super.diagnostic();
+            result.addProperty("advancement", definition.advancement().toString());
+            return result;
+        }
     }
 
+    /// A condition that completes when the player receives a specific explicit signal, optionally requiring a specific count.
     static final class ExplicitSignalInstance extends CounterInstance<BuiltInConditions.ExplicitSignal> {
         ExplicitSignalInstance(BuiltInConditions.ExplicitSignal definition, ConditionRuntime.CreationContext context) {
             super(definition, context, definition.count());
@@ -246,8 +295,16 @@ final class BuiltInConditionRuntime {
                     ? increment(1)
                     : ConditionRuntime.Update.NONE;
         }
+
+        @Override
+        public JsonObject diagnostic() {
+            JsonObject result = super.diagnostic();
+            result.addProperty("signal", definition.signal().toString());
+            return result;
+        }
     }
 
+    /// A condition that completes when the player falls a minimum distance without interruption, optionally requiring survival and specific start/end locations.
     static final class UninterruptedFallInstance extends BaseInstance<BuiltInConditions.UninterruptedFall> {
         private @Nullable Vec3 previousPosition;
         private @Nullable Vec3 airborneOrigin;
@@ -278,8 +335,7 @@ final class BuiltInConditionRuntime {
                 previousDimension = dimension;
                 return ConditionRuntime.Update.NONE;
             }
-            if (previousPosition != null
-                    && previousPosition.distanceTo(position) > definition.rules().teleportThreshold()) {
+            if (previousPosition != null && previousPosition.distanceTo(position) > definition.rules().teleportThreshold()) {
                 clearFall();
                 airborneOrigin = onGround ? position : null;
                 previousPosition = position;
@@ -360,6 +416,7 @@ final class BuiltInConditionRuntime {
         }
     }
 
+    /// A claim operation that consumes a specific item from the player's inventory, optionally requiring a specific count.
     private record ItemConsumption(ItemPredicate predicate, int required) implements ConditionRuntime.ClaimOperation {
         @Override
         public String describe() {
@@ -380,11 +437,8 @@ final class BuiltInConditionRuntime {
 
             List<ItemStack> removed = new ArrayList<>();
             int remaining = required;
-            for (int slot = 0; slot < inventory.getContainerSize() && remaining > 0; slot++) {
-                ItemStack stack = inventory.getItem(slot);
-                if (stack.isEmpty() || !predicate.test(stack)) {
-                    continue;
-                }
+            for (var stack : inventory) {
+                if (stack.isEmpty() || !predicate.test(stack)) continue;
                 int amount = Math.min(remaining, stack.getCount());
                 ItemStack taken = stack.copyWithCount(amount);
                 stack.shrink(amount);
@@ -407,8 +461,7 @@ final class BuiltInConditionRuntime {
 
         private int matchingCount(Container inventory) {
             int count = 0;
-            for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-                ItemStack stack = inventory.getItem(slot);
+            for (var stack : inventory) {
                 if (!stack.isEmpty() && predicate.test(stack)) {
                     count += stack.getCount();
                     if (count >= required) {

@@ -29,24 +29,13 @@ public final class RewardApi {
         GrantResult grant(D definition, Context context);
     }
 
-    public record Context(MinecraftServer server, UUID playerId, @Nullable ServerPlayer onlinePlayer, String idempotencyKey) {
-        public Context {
-            Objects.requireNonNull(server, "server");
-            Objects.requireNonNull(playerId, "playerId");
-            Objects.requireNonNull(idempotencyKey, "idempotencyKey");
-        }
-    }
+    public record Context(MinecraftServer server, UUID playerId, @Nullable ServerPlayer onlinePlayer, String idempotencyKey) {}
 
     public record GrantResult(State state, String message) {
         public enum State {
             SUCCESS,
             RETRY_LATER,
             PERMANENT_FAILURE
-        }
-
-        public GrantResult {
-            Objects.requireNonNull(state, "state");
-            Objects.requireNonNull(message, "message");
         }
 
         public static GrantResult success() {

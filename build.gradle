@@ -20,9 +20,16 @@ loom {
         }
     }
 
-    runs.configureEach {
-        jvmArguments.add("-XX:+AllowEnhancedClassRedefinition")
-        preferGradleTask.set(true)
+    if (System.getProperty("idea.active") == "true") {
+        runs {
+            client {
+                getProgramArguments().addAll(["--username", "RenardElectric", "--uuid", "81c5680f-418c-4389-8d5e-e319eb861ed6"])
+            }
+            configureEach {
+                jvmArguments.add("-XX:+AllowEnhancedClassRedefinition")
+                preferGradleTask.set(true)
+            }
+        }
     }
 }
 

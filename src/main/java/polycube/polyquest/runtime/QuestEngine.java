@@ -17,7 +17,6 @@ public final class QuestEngine implements AutoCloseable {
     private final QuestCatalogManager catalogs;
     private final DailyRotationService rotation;
     private final QuestLedger ledger;
-    private final QuestCatalogManager.Subscription catalogSubscription;
     private final Map<UUID, PlayerQuestSession> sessions = new HashMap<>();
     private List<QuestModel.Occurrence> availableOccurrences = List.of();
 
@@ -26,14 +25,14 @@ public final class QuestEngine implements AutoCloseable {
         this.catalogs = catalogs;
         this.rotation = rotation;
         this.ledger = ledger;
-        catalogSubscription = catalogs.addListener(this::onCatalogChanged);
         rebuildAvailableOccurrences();
     }
 
     /// Fans a player signal into every available, unclaimed occurrence, creating attempts lazily.
-    public void onSignal(QuestSignal signal) {
+    boolean onSignal(QuestSignal signal) {
         UUID playerId = signal.player().getUUID();
         PlayerQuestSession session = sessions.get(playerId);
+        boolean changed = false;
         for (QuestModel.Occurrence occurrence : available(playerId)) {
             if (ledger.isClaimed(playerId, occurrence.key())
                     || ledger.hasPending(playerId, occurrence.key())) {
@@ -43,17 +42,20 @@ public final class QuestEngine implements AutoCloseable {
                 session = new PlayerQuestSession();
                 sessions.put(playerId, session);
             }
-            session.getOrCreate(occurrence, server).onSignal(signal, server);
+            changed |= session.getOrCreate(occurrence, server).onSignal(signal, server).changed();
         }
+        return changed;
     }
 
     /// Advances deadline-only nodes for online and offline in-memory sessions.
-    public void tick(long serverTick) {
+    boolean tick(long serverTick) {
+        boolean changed = false;
         for (PlayerQuestSession session : sessions.values()) {
             for (QuestAttempt attempt : session.attempts()) {
-                attempt.tick(server, serverTick);
+                changed |= attempt.tick(server, serverTick).changed();
             }
         }
+        return changed;
     }
 
     /// Returns globally selected occurrences; claimed and pending state is filtered by callers.
@@ -84,7 +86,7 @@ public final class QuestEngine implements AutoCloseable {
     }
 
     /// Rebuilds availability and discards daily attempts whose occurrence is no longer active.
-    public void rotationChanged() {
+    void rotationChanged() {
         rebuildAvailableOccurrences();
         java.util.Set<String> activeKeys = rotation.current().slots().values().stream()
                 .map(occurrence -> occurrence.key().persistentKey())
@@ -92,9 +94,11 @@ public final class QuestEngine implements AutoCloseable {
         sessions.values().forEach(session -> session.removeDailyExcept(activeKeys));
     }
 
-    public void reset(UUID playerId, QuestModel.Occurrence occurrence) {
-        Optional.ofNullable(sessions.get(playerId)).ifPresent(session -> session.removeOccurrence(occurrence.key()));
-        ledger.resetClaim(playerId, occurrence.key());
+    boolean reset(UUID playerId, QuestModel.Occurrence occurrence) {
+        boolean attemptRemoved = Optional.ofNullable(sessions.get(playerId))
+                .map(session -> session.removeOccurrence(occurrence.key()))
+                .orElse(false);
+        return ledger.resetClaim(playerId, occurrence.key()) || attemptRemoved;
     }
 
     public void playerDisconnected(UUID playerId) {
@@ -102,7 +106,7 @@ public final class QuestEngine implements AutoCloseable {
     }
 
     /// Invalidates behavior changes while preserving attempts for presentation-only updates.
-    private void onCatalogChanged(QuestCatalogManager.Update update) {
+    void onCatalogChanged(QuestCatalogManager.Update update) {
         rebuildAvailableOccurrences();
         for (Identifier id : update.diff().removed()) {
             sessions.values().forEach(session -> session.removeQuest(id));
@@ -117,17 +121,14 @@ public final class QuestEngine implements AutoCloseable {
     private void rebuildAvailableOccurrences() {
         List<QuestModel.Occurrence> occurrences = new ArrayList<>(rotation.current().slots().values());
         for (QuestModel.Definition definition : catalogs.current().unique()) {
-            QuestModel.Key key = new QuestModel.Key(
-                    definition.id(), definition.behaviorHash(), new QuestModel.UniqueScope());
-            occurrences.add(new QuestModel.Occurrence(
-                    key, definition, Instant.EPOCH, Optional.empty()));
+            QuestModel.Key key = new QuestModel.Key(definition.id(), definition.behaviorHash(), new QuestModel.UniqueScope());
+            occurrences.add(new QuestModel.Occurrence(key, definition, Instant.EPOCH, Optional.empty()));
         }
         availableOccurrences = List.copyOf(occurrences);
     }
 
     @Override
     public void close() {
-        catalogSubscription.close();
         sessions.clear();
     }
 }

@@ -87,6 +87,7 @@ public final class QuestAttempt {
 
     /// Re-derives readiness after claim compensation instead of blindly forcing an active state.
     public void markActiveAfterFailedClaim() {
+        status = QuestModel.AttemptStatus.ACTIVE;
         refreshStatus();
     }
 

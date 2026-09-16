@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.Test;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.condition.CompositeConditions;
@@ -42,6 +43,7 @@ final class QuestDefinitionValidatorTest {
                 Optional.empty(),
                 "Timed",
                 List.of(),
+                Items.DIAMOND,
                 condition,
                 new RewardApi.Plan(Optional.empty(), List.of()),
                 "behavior",

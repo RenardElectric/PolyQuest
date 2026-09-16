@@ -2,8 +2,10 @@ package polycube.polyquest.model;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.core.Holder;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.StringRepresentable;
+import net.minecraft.world.item.Item;
 import polycube.polyquest.condition.ConditionApi;
 import polycube.polyquest.reward.RewardApi;
 
@@ -59,17 +61,15 @@ public final class QuestModel {
 
     /// Decoded quest data before the resource path supplies its identifier and hashes.
     public record Body(
-            Availability availability,
-            Optional<Difficulty> difficulty,
-            String title,
-            List<String> description,
-            ConditionApi.Definition condition,
-            RewardApi.Plan rewards) {
+            Availability availability, Optional<Difficulty> difficulty, String title,
+            List<String> description, Holder<Item> icon, ConditionApi.Definition condition, RewardApi.Plan rewards
+    ) {
         public static final Codec<Body> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Availability.CODEC.fieldOf("availability").forGetter(Body::availability),
                 Difficulty.CODEC.optionalFieldOf("difficulty").forGetter(Body::difficulty),
                 Codec.STRING.fieldOf("title").forGetter(Body::title),
                 Codec.STRING.listOf().optionalFieldOf("description", List.of()).forGetter(Body::description),
+                Item.CODEC.fieldOf("icon").forGetter(Body::icon),
                 ConditionApi.codec().fieldOf("condition").forGetter(Body::condition),
                 RewardApi.Plan.CODEC.fieldOf("rewards").forGetter(Body::rewards)
         ).apply(instance, Body::new));
@@ -81,7 +81,7 @@ public final class QuestModel {
 
     public record Definition(
             Identifier id, Availability availability, Optional<Difficulty> difficulty,
-            String title, List<String> description, ConditionApi.Definition condition,
+            String title, List<String> description, Item icon, ConditionApi.Definition condition,
             RewardApi.Plan rewards, String behaviorHash, String presentationHash
     ) {
         public Definition {
@@ -91,7 +91,7 @@ public final class QuestModel {
         public static Definition fromBody(Identifier id, Body body, String behaviorHash, String presentationHash) {
             return new Definition(
                     id, body.availability(), body.difficulty(),
-                    body.title(), body.description(), body.condition(),
+                    body.title(), body.description(), body.icon().value(), body.condition(),
                     body.rewards(), behaviorHash, presentationHash
             );
         }

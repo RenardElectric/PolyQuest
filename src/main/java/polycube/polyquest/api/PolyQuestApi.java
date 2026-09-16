@@ -38,7 +38,7 @@ public final class PolyQuestApi {
     public static DataResult<QuestModel.Occurrence> quest(NameAndId player, Identifier questId) {
         return manager().flatMap(
                 manager ->
-                        manager.engine().findOccurrence(player.id(), questId).map(DataResult::success)
+                        manager.findOccurrence(player, questId).map(DataResult::success)
                                 .orElse(DataResult.error(() -> "Quest not found for player " + player + ": " + questId))
         );
     }
@@ -65,7 +65,7 @@ public final class PolyQuestApi {
         return manager().flatMap(
                 manager ->
                         quest(player, questId).map(oc -> {
-                            manager.engine().reset(player.id(), oc);
+                            manager.reset(player, oc);
                             return manager;
                         })
         );
@@ -73,7 +73,7 @@ public final class PolyQuestApi {
 
     /// Retries any pending reward transactions for the given player, if the quest manager is installed.
     public static DataResult<QuestClaimService.ClaimResult> claim(ServerPlayer player, Identifier questId) {
-        return manager().map(manager -> manager.claims().claim(player, questId));
+        return manager().map(manager -> manager.claim(player, questId));
     }
 
     /// Returns a JSON string representing the diagnostic state of the given player's quest attempt, if the quest manager is installed.

@@ -3,6 +3,7 @@ package polycube.polyquest.commands;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.permissions.PermissionLevel;
 import polycube.polyquest.PolyQuest;
+import polycube.polyquest.gui.QuestGui;
 
 public class HelpCommand extends PolyQuestCommand {
     public HelpCommand() {
@@ -28,6 +29,7 @@ public class HelpCommand extends PolyQuestCommand {
             }
         }
         source.sendSuccess(() -> helpMessage, false);
+        new QuestGui(source.getPlayer());
         return 1;
     }
 }

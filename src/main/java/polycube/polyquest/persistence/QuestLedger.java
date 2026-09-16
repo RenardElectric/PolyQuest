@@ -154,14 +154,16 @@ public final class QuestLedger extends SavedData {
         return List.copyOf(pending.values());
     }
 
-    public void resetClaim(UUID playerId, QuestModel.Key occurrence) {
+    public boolean resetClaim(UUID playerId, QuestModel.Key occurrence) {
         Set<String> playerClaims = claims.get(playerId);
         if (playerClaims != null && playerClaims.remove(occurrence.persistentKey())) {
             if (playerClaims.isEmpty()) {
                 claims.remove(playerId);
             }
             persistImmediately();
+            return true;
         }
+        return false;
     }
 
     public void beginRotation(LocalDate date) {
@@ -169,7 +171,7 @@ public final class QuestLedger extends SavedData {
             return;
         }
         rotationDate = date;
-        rotationGenerations.replaceAll((difficulty, ignored) -> 0);
+        rotationGenerations.replaceAll((_, _) -> 0);
         persistImmediately();
     }
 

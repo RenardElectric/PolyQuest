@@ -97,6 +97,7 @@ final class QuestResourceCompiler {
             JsonObject behavior = expanded.deepCopy();
             behavior.remove("title");
             behavior.remove("description");
+            behavior.remove("icon");
             body.rewards().profile().ifPresent(profileId -> {
                 JsonElement profileJson = resources.rewardProfiles().get(profileId);
                 if (profileJson != null) {
@@ -110,6 +111,9 @@ final class QuestResourceCompiler {
             }
             if (expanded.has("description")) {
                 presentation.add("description", expanded.get("description"));
+            }
+            if (expanded.has("icon")) {
+                presentation.add("icon", expanded.get("icon"));
             }
 
             QuestModel.Definition definition = QuestModel.Definition.fromBody(id, body, hash(behavior), hash(presentation));

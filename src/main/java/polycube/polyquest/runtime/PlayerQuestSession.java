@@ -33,12 +33,11 @@ public final class PlayerQuestSession {
     }
 
     public void removeQuest(Identifier questId) {
-        attempts.values().removeIf(attempt ->
-                attempt.occurrence().definition().id().equals(questId));
+        attempts.values().removeIf(attempt -> attempt.occurrence().definition().id().equals(questId));
     }
 
-    public void removeOccurrence(QuestModel.Key key) {
-        attempts.remove(key.persistentKey());
+    public boolean removeOccurrence(QuestModel.Key key) {
+        return attempts.remove(key.persistentKey()) != null;
     }
 
     /// Rebinds attempts only when the quest's behavior revision is unchanged.

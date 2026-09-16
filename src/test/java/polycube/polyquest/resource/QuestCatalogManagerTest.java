@@ -7,13 +7,23 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import net.minecraft.SharedConstants;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.world.item.Items;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.reward.RewardApi;
 
 final class QuestCatalogManagerTest {
+    @BeforeAll
+    static void bootstrapMinecraftRegistries() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
+
     @Test
     void diffSeparatesBehaviorAndPresentationChanges() {
         Identifier behaviorId = id("behavior");
@@ -62,6 +72,7 @@ final class QuestCatalogManagerTest {
                 Optional.empty(),
                 "Test",
                 List.of(),
+                Items.SUNFLOWER,
                 new BuiltInConditions.ExplicitSignal(id, 1),
                 new RewardApi.Plan(Optional.empty(), List.of()),
                 behaviorHash,

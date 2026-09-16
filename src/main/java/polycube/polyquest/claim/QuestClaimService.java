@@ -22,45 +22,38 @@ public final class QuestClaimService {
     private final QuestEngine engine;
     private final QuestLedger ledger;
     private final QuestCatalogManager catalogs;
+    private final Runnable questChanged;
 
     public QuestClaimService(
             MinecraftServer server, QuestEngine engine,
-            QuestLedger ledger, QuestCatalogManager catalogs
+            QuestLedger ledger, QuestCatalogManager catalogs, Runnable questChanged
     ) {
         this.server = server;
         this.engine = engine;
         this.ledger = ledger;
         this.catalogs = catalogs;
+        this.questChanged = questChanged;
     }
 
     /// Runs the normal claim transaction and checkpoints each stage for safe reward retries.
     public ClaimResult claim(ServerPlayer player, Identifier questId) {
         Optional<QuestModel.Occurrence> occurrenceResult = engine.findOccurrence(player.getUUID(), questId);
-        if (occurrenceResult.isEmpty()) {
-            return ClaimResult.failure("That quest is not currently available");
-        }
+        if (occurrenceResult.isEmpty()) return ClaimResult.failure("That quest is not currently available");
+
         QuestModel.Occurrence occurrence = occurrenceResult.get();
-        if (ledger.isClaimed(player.getUUID(), occurrence.key())) {
-            return ClaimResult.failure("You have already claimed this quest");
-        }
+        if (ledger.isClaimed(player.getUUID(), occurrence.key())) return ClaimResult.failure("You have already claimed this quest");
 
         Optional<QuestLedger.PendingTransaction> existing = ledger.pendingFor(player.getUUID()).stream()
                 .filter(transaction -> transaction.occurrenceKey().equals(occurrence.key().persistentKey()))
                 .findFirst();
-        if (existing.isPresent()) {
-            return retry(existing.get(), player);
-        }
+        if (existing.isPresent()) return retry(existing.get(), player);
 
         QuestAttempt attempt = engine.attempt(player.getUUID(), occurrence);
         ConditionRuntime.ClaimPreparation preparation = attempt.prepareClaim(new QuestAttempt.ServerPlayerContext(server, player, server.getTickCount()));
-        if (!preparation.ready()) {
-            return ClaimResult.failure(preparation.failure());
-        }
+        if (!preparation.ready()) return ClaimResult.failure(preparation.failure());
 
         List<RewardApi.Definition> rewards = resolveRewards(occurrence.definition());
-        if (rewards.isEmpty()) {
-            return ClaimResult.failure("This quest has no resolvable rewards");
-        }
+        if (rewards.isEmpty()) return ClaimResult.failure("This quest has no resolvable rewards");
 
         for (ConditionRuntime.ClaimOperation operation : preparation.operations()) {
             if (!operation.revalidate(new ConditionRuntime.ClaimContext(server, player, server.getTickCount()))) {
@@ -84,40 +77,36 @@ public final class QuestClaimService {
         ledger.markCostsCommitted(transaction);
         attempt.markPending();
         ClaimResult rewardResult = grantRemaining(transaction, player);
-        if (rewardResult.state() == ClaimState.PERMANENT_FAILURE && transaction.nextReward() == 0) {
+        boolean reverted = rewardResult.state() == ClaimState.PERMANENT_FAILURE && transaction.nextReward() == 0;
+        if (reverted) {
             runRollbacks(rollbacks);
             ledger.cancel(transaction);
             attempt.markActiveAfterFailedClaim();
         } else if (rewardResult.state() == ClaimState.SUCCESS) {
             attempt.markClaimed();
         }
+        if (!reverted) questChanged.run();
         return rewardResult;
     }
 
     /// Administrator path that grants configured rewards without objective costs.
     /// The normal durable transaction path is retained.
     public ClaimResult forceClaim(ServerPlayer player, Identifier questId) {
-        Optional<QuestModel.Occurrence> occurrenceResult =
-                engine.findOccurrence(player.getUUID(), questId);
-        if (occurrenceResult.isEmpty()) {
-            return ClaimResult.failure("That quest is not currently available");
-        }
+        Optional<QuestModel.Occurrence> occurrenceResult = engine.findOccurrence(player.getUUID(), questId);
+        if (occurrenceResult.isEmpty()) return ClaimResult.failure("That quest is not currently available");
+
         QuestModel.Occurrence occurrence = occurrenceResult.get();
-        if (ledger.isClaimed(player.getUUID(), occurrence.key())) {
-            return ClaimResult.failure("Quest has already been claimed");
-        }
+        if (ledger.isClaimed(player.getUUID(), occurrence.key())) return ClaimResult.failure("Quest has already been claimed");
+
         Optional<QuestLedger.PendingTransaction> existing = ledger.pendingFor(player.getUUID()).stream()
                 .filter(transaction -> transaction.occurrenceKey().equals(occurrence.key().persistentKey()))
                 .findFirst();
-        if (existing.isPresent()) {
-            return retry(existing.get(), player);
-        }
+        if (existing.isPresent()) return retry(existing.get(), player);
+
         List<RewardApi.Definition> rewards = resolveRewards(occurrence.definition());
-        if (rewards.isEmpty()) {
-            return ClaimResult.failure("This quest has no resolvable rewards");
-        }
-        QuestLedger.PendingTransaction transaction = ledger.beginClaim(
-                player.getUUID(), occurrence, rewards);
+        if (rewards.isEmpty()) return ClaimResult.failure("This quest has no resolvable rewards");
+
+        QuestLedger.PendingTransaction transaction = ledger.beginClaim(player.getUUID(), occurrence, rewards);
         ledger.markCostsCommitted(transaction);
         QuestAttempt attempt = engine.attempt(player.getUUID(), occurrence);
         attempt.markPending();
@@ -125,6 +114,7 @@ public final class QuestClaimService {
         if (result.state() == ClaimState.SUCCESS) {
             attempt.markClaimed();
         }
+        questChanged.run();
         return result;
     }
 
@@ -137,6 +127,10 @@ public final class QuestClaimService {
             // No durable cost-commit marker exists. Cancel rather than risk granting a reward
             // for an operation that may never have consumed its inputs.
             ledger.cancel(transaction);
+            engine.findOccurrence(player.getUUID(), transaction.questId())
+                    .flatMap(occurrence -> engine.existingAttempt(player.getUUID(), occurrence.key()))
+                    .ifPresent(QuestAttempt::markActiveAfterFailedClaim);
+            questChanged.run();
             return ClaimResult.failure("Interrupted claim was cancelled; submit the claim again");
         }
         if (transaction.state() == QuestLedger.TransactionState.FAILED) {
@@ -148,6 +142,7 @@ public final class QuestClaimService {
                     .flatMap(occurrence -> engine.existingAttempt(player.getUUID(), occurrence.key()))
                     .ifPresent(QuestAttempt::markClaimed);
         }
+        questChanged.run();
         return result;
     }
 

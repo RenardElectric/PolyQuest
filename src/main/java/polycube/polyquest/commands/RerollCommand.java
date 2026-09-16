@@ -57,7 +57,7 @@ public final class RerollCommand extends PolyQuestCommand {
         var manager = CommandResult.require(PolyQuestApi.manager());
         var message = CommandText.success("Rerolled the " + difficulties.stream().map(QuestModel.Difficulty::getSerializedName).reduce((a, b) -> a + ", " + b).orElse("") + " daily slot(s)");
         for (var difficulty : difficulties) {
-            var selected = manager.rotation().current().slots().get(difficulty);
+            var selected = manager.dailyAssignment().slots().get(difficulty);
             if (selected != null) {
                 message.append(CommandText.field("Selected " + difficulty.getSerializedName(), CommandText.questDefinition(selected.definition())));
             }

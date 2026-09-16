@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.Test;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.config.QuestConfig;
@@ -59,6 +60,7 @@ final class QuestLedgerTest {
                 Optional.empty(),
                 "Test",
                 List.of(),
+                Items.SUNFLOWER,
                 new BuiltInConditions.ExplicitSignal(id, 1),
                 new RewardApi.Plan(Optional.empty(), List.of()),
                 "behavior",

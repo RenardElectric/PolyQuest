@@ -6,7 +6,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import polycube.polyquest.commands.PolyQuestCommands;
+import polycube.polycore.commands.PolyCommands;
+import polycube.polyquest.commands.*;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.condition.CompositeConditions;
 import polycube.polyquest.config.QuestConfig;
@@ -41,7 +42,17 @@ public final class PolyQuest implements ModInitializer {
         );
 
         FabricQuestEvents.register();
-        PolyQuestCommands.registerCommands();
+        PolyCommands.registerCommands(
+                MOD_ID,
+                "PolyQuest",
+                LOGGER,
+                new ListCommand(),
+                new ClaimCommand(),
+                new InspectCommand(),
+                new SignalCommand(),
+                new RerollCommand(),
+                new ResetCommand()
+        );
 
         LOGGER.info("PolyQuest initialized");
     }

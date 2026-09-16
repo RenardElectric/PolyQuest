@@ -8,6 +8,10 @@ import net.minecraft.commands.arguments.GameProfileArgument;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.server.players.NameAndId;
+import polycube.polycore.commands.CommandResult;
+import polycube.polycore.commands.PolyCommand;
+import polycube.polycore.text.TextComponents;
+import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.model.QuestModel;
 
@@ -15,9 +19,10 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 
-public final class ListCommand extends PolyQuestCommand {
+public final class ListCommand extends PolyCommand {
     public ListCommand() {
         super(
+                PolyQuest.MOD_ID,
                 "list",
                 "Lists all available quests for the player.",
                 "[player]",
@@ -55,12 +60,12 @@ public final class ListCommand extends PolyQuestCommand {
                 .filter(quest -> quest.status() == QuestModel.AttemptStatus.READY_TO_CLAIM)
                 .count();
         long claimed = quests.stream().filter(quest -> quest.status() == QuestModel.AttemptStatus.CLAIMED).count();
-        var message = CommandText.header("Quests for " + player.name())
-                .append(CommandText.field("Total", CommandText.value(quests.size())))
-                .append(CommandText.field("Ready", CommandText.value(ready)))
-                .append(CommandText.field("Claimed", CommandText.value(claimed)));
+        var message = TextComponents.header("Quests for " + player.name())
+                .append(TextComponents.field("Total", TextComponents.value(quests.size())))
+                .append(TextComponents.field("Ready", TextComponents.value(ready)))
+                .append(TextComponents.field("Claimed", TextComponents.value(claimed)));
         if (quests.isEmpty()) {
-            message.append("\n\n  ").append(CommandText.muted("No quests are currently available."));
+            message.append("\n\n  ").append(TextComponents.muted("No quests are currently available."));
         }
         for (QuestEntry quest : quests) {
             appendQuest(message, quest, player);
@@ -74,11 +79,11 @@ public final class ListCommand extends PolyQuestCommand {
         var occurrence = entry.occurrence();
         var id = occurrence.definition().id();
         message.append("\n  ")
-                .append(CommandText.status(entry.status()))
+                .append(QuestCommandText.status(entry.status()))
                 .append("  ")
-                .append(CommandText.quest(occurrence, entry.status(), player))
-                .append(CommandText.muted(" • " + CommandText.availability(occurrence.definition()) + " • " + CommandText.expiry(occurrence)));
-        CommandText.appendStateAction(message, entry.status(), id, player);
+                .append(QuestCommandText.quest(occurrence, entry.status(), player))
+                .append(TextComponents.muted(" • " + QuestCommandText.availability(occurrence.definition()) + " • " + QuestCommandText.expiry(occurrence)));
+        QuestCommandText.appendStateAction(message, entry.status(), id, player);
     }
 
     private static int displayOrder(QuestModel.Occurrence occurrence) {

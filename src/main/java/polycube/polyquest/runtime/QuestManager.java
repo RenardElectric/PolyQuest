@@ -10,6 +10,7 @@ import polycube.polyquest.config.QuestConfig;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.persistence.QuestLedger;
 import polycube.polyquest.resource.QuestCatalogManager;
+import polycube.polyquest.reward.RewardApi;
 import polycube.polyquest.rotation.DailyRotationService;
 import polycube.polyquest.signal.QuestSignal;
 
@@ -115,6 +116,11 @@ public final class QuestManager {
 
     public Optional<QuestModel.Occurrence> findOccurrence(NameAndId player, Identifier questId) {
         return engine.findOccurrence(player.id(), questId);
+    }
+
+    /// Returns a reward profile from the currently active datapack catalog.
+    public Optional<RewardApi.Profile> rewardProfile(Identifier profileId) {
+        return Optional.ofNullable(catalogs.current().rewardProfiles().get(profileId));
     }
 
     public QuestModel.DailyAssignment dailyAssignment() {

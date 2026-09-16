@@ -9,15 +9,20 @@ import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.server.players.NameAndId;
+import polycube.polycore.commands.CommandResult;
+import polycube.polycore.commands.PolyCommand;
+import polycube.polycore.text.TextComponents;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
+import polycube.polyquest.commands.commandArguments.QuestArgument;
 
 import java.util.Collection;
 import java.util.List;
 
-public final class ResetCommand extends PolyQuestCommand {
+public final class ResetCommand extends PolyCommand {
     public ResetCommand() {
         super(
+                PolyQuest.MOD_ID,
                 "reset",
                 "Resets one of your quest attempts and its claim state",
                 "<quest> [player]",
@@ -28,7 +33,7 @@ public final class ResetCommand extends PolyQuestCommand {
     @Override
     public LiteralArgumentBuilder<CommandSourceStack> getCommand(String name) {
         return super.getCommand(name)
-                .then(questArgument("quest")
+                .then(QuestArgument.questArgument("quest")
                         .executes(context -> reset(
                                 context.getSource(),
                                 IdentifierArgument.getId(context, "quest"),
@@ -52,11 +57,11 @@ public final class ResetCommand extends PolyQuestCommand {
         var previousStatus = manager.attempt(player, occurrence).status();
         CommandResult.require(PolyQuestApi.reset(player, id));
 
-        var message = CommandText.success("Reset ")
-                .append(CommandText.quest(occurrence, previousStatus, player))
-                .append(" for ").append(CommandText.value(player.name())).append(".")
-                .append(CommandText.field("Previous status", CommandText.status(previousStatus)))
-                .append("\n").append(CommandText.action("[Inspect quest]", "/" + PolyQuest.MOD_ID + " inspect " + id + " " + player.name()));
+        var message = TextComponents.success("Reset ")
+                .append(QuestCommandText.quest(occurrence, previousStatus, player))
+                .append(" for ").append(TextComponents.value(player.name())).append(".")
+                .append(TextComponents.field("Previous status", QuestCommandText.status(previousStatus)))
+                .append("\n").append(TextComponents.action("[Inspect quest]", "/" + PolyQuest.MOD_ID + " inspect " + id + " " + player.name()));
         source.sendSuccess(() -> message, true);
         return 1;
     }

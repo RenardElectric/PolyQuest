@@ -10,14 +10,19 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.PermissionLevel;
+import polycube.polycore.commands.CommandResult;
+import polycube.polycore.commands.PolyCommand;
+import polycube.polycore.text.TextComponents;
+import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
 
 import java.util.Collection;
 import java.util.List;
 
-public final class SignalCommand extends PolyQuestCommand {
+public final class SignalCommand extends PolyCommand {
     public SignalCommand() {
         super(
+                PolyQuest.MOD_ID,
                 "signal",
                 "Emits an explicit quest signal for yourself",
                 "<id> [player]",
@@ -51,8 +56,8 @@ public final class SignalCommand extends PolyQuestCommand {
         var details = Component.literal("Player: " + player.getScoreboardName()
                 + "\nServer tick: " + manager.server().getTickCount()
                 + "\nClick to copy the signal ID.");
-        var signal = CommandText.hover(CommandText.copy(id.toString(), id.toString()), details);
-        source.sendSuccess(() -> CommandText.success("Emitted quest signal ").append(signal), true);
+        var signal = TextComponents.hover(TextComponents.copy(id.toString(), id.toString()), details);
+        source.sendSuccess(() -> TextComponents.success("Emitted quest signal ").append(signal), true);
         return 1;
     }
 }

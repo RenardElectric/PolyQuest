@@ -7,6 +7,9 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.server.permissions.PermissionLevel;
+import polycube.polycore.commands.CommandResult;
+import polycube.polycore.commands.PolyCommand;
+import polycube.polycore.text.TextComponents;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.model.QuestModel;
@@ -15,9 +18,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-public final class RerollCommand extends PolyQuestCommand {
+public final class RerollCommand extends PolyCommand {
     public RerollCommand() {
         super(
+                PolyQuest.MOD_ID,
                 "reroll",
                 "Rerolls one difficulty in today's daily quest rotation",
                 "[difficulty]",
@@ -43,26 +47,26 @@ public final class RerollCommand extends PolyQuestCommand {
     private static int reroll(CommandSourceStack source, List<String> rawDifficulties) throws CommandSyntaxException {
         var optDifficulties = rawDifficulties.stream().map(QuestModel.Difficulty::byName).toList();
         if (optDifficulties.stream().anyMatch(Optional::isEmpty)) {
-            source.sendFailure(CommandText.error("Expected easy, medium, or hard."));
+            source.sendFailure(TextComponents.error("Expected easy, medium, or hard."));
             return 0;
         }
 
         //noinspection OptionalGetWithoutIsPresent
         var difficulties = optDifficulties.stream().map(Optional::get).toList();
         if (!CommandResult.require(PolyQuestApi.reroll(difficulties))) {
-            source.sendFailure(CommandText.error("No daily quest is available for the " + difficulties.stream().map(QuestModel.Difficulty::getSerializedName).reduce((a, b) -> a + ", " + b).orElse("") + " difficulty slot(s)"));
+            source.sendFailure(TextComponents.error("No daily quest is available for the " + difficulties.stream().map(QuestModel.Difficulty::getSerializedName).reduce((a, b) -> a + ", " + b).orElse("") + " difficulty slot(s)"));
             return 0;
         }
 
         var manager = CommandResult.require(PolyQuestApi.manager());
-        var message = CommandText.success("Rerolled the " + difficulties.stream().map(QuestModel.Difficulty::getSerializedName).reduce((a, b) -> a + ", " + b).orElse("") + " daily slot(s)");
+        var message = TextComponents.success("Rerolled the " + difficulties.stream().map(QuestModel.Difficulty::getSerializedName).reduce((a, b) -> a + ", " + b).orElse("") + " daily slot(s)");
         for (var difficulty : difficulties) {
             var selected = manager.dailyAssignment().slots().get(difficulty);
             if (selected != null) {
-                message.append(CommandText.field("Selected " + difficulty.getSerializedName(), CommandText.questDefinition(selected.definition())));
+                message.append(TextComponents.field("Selected " + difficulty.getSerializedName(), QuestCommandText.questDefinition(selected.definition())));
             }
         }
-        message.append("\n").append(CommandText.action("[View quests]", "/" + PolyQuest.MOD_ID + " list"));
+        message.append("\n").append(TextComponents.action("[View quests]", "/" + PolyQuest.MOD_ID + " list"));
         source.sendSuccess(() -> message, true);
         return 1;
     }

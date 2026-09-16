@@ -63,16 +63,12 @@ public final class RewardApi {
         ).apply(instance, Plan::new));
 
         public Plan {
-            Objects.requireNonNull(profile, "profile");
-            Objects.requireNonNull(inlineRewards, "inlineRewards");
             inlineRewards = List.copyOf(inlineRewards);
         }
     }
 
     public record Profile(Identifier id, List<Definition> rewards) {
         public Profile {
-            Objects.requireNonNull(id, "id");
-            Objects.requireNonNull(rewards, "rewards");
             rewards = List.copyOf(rewards);
         }
     }
@@ -89,7 +85,7 @@ public final class RewardApi {
     }
 
     public static synchronized void setEconomyGateway(EconomyGateway gateway) {
-        economyGateway = Objects.requireNonNull(gateway, "gateway");
+        economyGateway = gateway;
     }
 
     public static EconomyGateway economyGateway() {

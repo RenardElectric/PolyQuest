@@ -29,7 +29,6 @@ public record QuestConfig(
         boolean announceRotation, int pendingRewardRetrySeconds
 ) {
     public QuestConfig {
-        Objects.requireNonNull(timeZone, "timeZone");
         if (pendingRewardRetrySeconds < 1) {
             throw new IllegalArgumentException("pendingRewardRetrySeconds must be positive");
         }

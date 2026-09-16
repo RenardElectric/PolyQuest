@@ -1,9 +1,7 @@
 package polycube.polyquest.commands;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.players.NameAndId;
@@ -14,65 +12,13 @@ import polycube.polyquest.model.QuestModel;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Locale;
+
+import static polycube.polycore.text.TextComponents.*;
+import static polycube.polycore.text.TextCore.*;
 
 /// Shared, vanilla-client-compatible chat formatting. Never styles a caller's component in place.
-public final class CommandText {
-    private CommandText() {}
-
-    private static MutableComponent colored(String text, ChatFormatting color) {
-        return Component.literal(text).withStyle(color);
-    }
-
-    public static MutableComponent message() {
-        return Component.empty().withStyle(ChatFormatting.GRAY)
-                .append(colored("[PolyQuest] ", ChatFormatting.GOLD));
-    }
-
-    public static MutableComponent header(String title) {
-        return message().append(colored(title, ChatFormatting.GOLD).withStyle(ChatFormatting.BOLD));
-    }
-
-    public static MutableComponent success(String text) {
-        return message().append(colored(text, ChatFormatting.GREEN));
-    }
-
-    public static MutableComponent error(String text) {
-        return error(Component.literal(text));
-    }
-
-    public static MutableComponent error(Component text) {
-        return message().append(colored("Error: ", ChatFormatting.RED))
-                .append(text.copy().withStyle(ChatFormatting.RED));
-    }
-
-    public static MutableComponent warning(String text) {
-        return message().append(colored("Warning: " + text, ChatFormatting.YELLOW));
-    }
-
-    public static MutableComponent value(Object value) {
-        return colored(String.valueOf(value), ChatFormatting.AQUA);
-    }
-
-    public static MutableComponent value(Component value) {
-        return value.copy().withStyle(ChatFormatting.AQUA);
-    }
-
-    public static MutableComponent muted(String text) {
-        return colored(text, ChatFormatting.DARK_GRAY);
-    }
-
-    public static MutableComponent amount(Component amount) {
-        return amount.copy().withStyle(ChatFormatting.GREEN);
-    }
-
-    public static MutableComponent field(String label, Component value) {
-        return colored("\n  " + label + ": ", ChatFormatting.GRAY).append(value);
-    }
-
-    public static MutableComponent field(Component label, Component value) {
-        return Component.literal("\n  ").append(label).append(": ").append(value);
-    }
+public final class QuestCommandText {
+    private QuestCommandText() {}
 
     public static MutableComponent questDefinition(QuestModel.Definition quest) {
         return copy(quest.title(), quest.id().toString());
@@ -152,28 +98,12 @@ public final class CommandText {
         return rewards.size() + " inline (" + types + ")";
     }
 
-    public static MutableComponent badge() {
-        return colored(" [default]", ChatFormatting.YELLOW);
-    }
-
-    public static MutableComponent yesNo(boolean value) {
-        return colored(value ? "Yes" : "No", value ? ChatFormatting.GREEN : ChatFormatting.GRAY);
-    }
-
-    public static MutableComponent property(Component subject, String label, Component value) {
-        return message().append(subject).append(field(label, value));
-    }
-
-    public static MutableComponent updated(Component subject, String label, Component value) {
-        return success("Updated ").append(subject).append(field(label, value));
-    }
-
     public static void appendStateAction(MutableComponent message, QuestModel.AttemptStatus status, Identifier id, NameAndId player) {
         var command = "/" + PolyQuest.MOD_ID + " claim " + id + " " + player.name();
         if (status == QuestModel.AttemptStatus.READY_TO_CLAIM) {
-            message.append(" ").append(CommandText.action("[Claim]", command));
+            message.append(" ").append(action("[Claim]", command));
         } else if (status == QuestModel.AttemptStatus.CLAIM_PENDING) {
-            message.append(" ").append(CommandText.action("[Retry reward]", command));
+            message.append(" ").append(action("[Retry reward]", command));
         }
     }
 
@@ -184,18 +114,18 @@ public final class CommandText {
             message.append("\n  ").append(Component.literal(quest.description().get(index)).withStyle(ChatFormatting.GRAY));
         }
         if (quest.description().size() > visibleLines) {
-            message.append("\n  ").append(CommandText.muted("… " + (quest.description().size() - visibleLines) + " more line(s)"));
+            message.append("\n  ").append(muted("… " + (quest.description().size() - visibleLines) + " more line(s)"));
         }
         return message;
     }
 
     public static MutableComponent resetQuest(Identifier id, NameAndId player) {
-        return CommandText.action("[Reset]", "/" + PolyQuest.MOD_ID + " reset " + id + " " + player.name());
+        return action("[Reset]", "/" + PolyQuest.MOD_ID + " reset " + id + " " + player.name());
     }
 
     public static MutableComponent technicalDetails(QuestModel.Occurrence occurrence) {
         QuestModel.Definition quest = occurrence.definition();
-        return CommandText.copy("[Technical details]", "Quest: " + quest.id()
+        return copy("[Technical details]", "Quest: " + quest.id()
                 + "\nOccurrence: " + occurrence.key().persistentKey()
                 + "\nBehavior hash: " + quest.behaviorHash()
                 + "\nPresentation hash: " + quest.presentationHash());
@@ -204,38 +134,9 @@ public final class CommandText {
     public static MutableComponent diagnostics(Identifier id, NameAndId player) {
         var diagnostic = PolyQuestApi.inspect(player, id);
         if (diagnostic.error().isPresent()) {
-            return CommandText.hover(Component.literal("[Diagnostics]"), error("Failed to retrieve diagnostics for quest " + id + " for player " + player.name() + ": " + diagnostic.error().get()));
+            return hover(Component.literal("[Diagnostics]"), error("Failed to retrieve diagnostics for quest " + id + " for player " + player.name() + ": " + diagnostic.error().get()));
         }
-        return CommandText.copy("[Diagnostics]", diagnostic.getOrThrow());
-    }
-
-    public static MutableComponent action(String label, String command) {
-        return action(label, command, Component.literal("Put this command in chat:\n" + command));
-    }
-
-    public static MutableComponent action(String label, String command, Component hover) {
-        return value(label).withStyle(style -> style.withUnderlined(true)
-                .withClickEvent(new ClickEvent.SuggestCommand(command))
-                .withHoverEvent(new HoverEvent.ShowText(hover)));
-    }
-
-    public static MutableComponent hover(Component label, Component hover) {
-        return label.copy().withStyle(style -> style.withHoverEvent(new HoverEvent.ShowText(hover)));
-    }
-
-    public static MutableComponent copy(String label, String copyText) {
-        return value(label).withStyle(style -> style.withUnderlined(true)
-                .withClickEvent(new ClickEvent.CopyToClipboard(copyText))
-                .withHoverEvent(new HoverEvent.ShowText(Component.literal("Copy this text:\n" + copyText))));
-    }
-
-    public static MutableComponent confirmation(Component subject, Component consequences, String command) {
-        return warning("Delete ").append(subject).append("?")
-                .append(consequences)
-                .append(colored("\nThis cannot be undone. Do nothing to cancel.", ChatFormatting.RED))
-                .append("\n").append(action("[Prepare confirmation]", command))
-                .append(" then press Enter to confirm.")
-                .append("\n").append(muted(command));
+        return copy("[Diagnostics]", diagnostic.getOrThrow());
     }
 
     private static MutableComponent questTooltip(
@@ -257,13 +158,5 @@ public final class CommandText {
                 .append(field("Objective", value(quest.condition().type().id().toString())))
                 .append(field("Rewards", value(rewards(quest))));
         return tooltip;
-    }
-
-    private static String abbreviate(String text, int limit) {
-        return text.length() <= limit ? text : text.substring(0, limit - 1) + "…";
-    }
-
-    private static String titleCase(String text) {
-        return text.substring(0, 1).toUpperCase(Locale.ROOT) + text.substring(1);
     }
 }

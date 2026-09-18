@@ -8,7 +8,9 @@ import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import java.util.Map;
 import java.util.Objects;
+import net.minecraft.SharedConstants;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import polycube.polyquest.condition.BuiltInConditions;
@@ -20,6 +22,8 @@ import polycube.polyquest.reward.RewardApi;
 final class QuestResourceCompilerTest {
     @BeforeAll
     static void registerTestedTypes() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
         ConditionApi.register(BuiltInConditions.ExplicitSignal.TYPE);
         RewardApi.register(BuiltInRewards.Experience.TYPE);
     }

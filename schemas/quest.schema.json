@@ -28,6 +28,7 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "icon": { "$ref": "polyquest.schema.json#/$defs/identifier" },
         "condition": { "$ref": "polyquest.schema.json#/$defs/condition" },
         "rewards": { "$ref": "polyquest.schema.json#/$defs/rewardPlan" }
       },

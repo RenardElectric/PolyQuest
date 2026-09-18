@@ -9,9 +9,12 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import net.minecraft.SharedConstants;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.Bootstrap;
 import net.minecraft.world.item.Items;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.config.QuestConfig;
@@ -20,6 +23,12 @@ import polycube.polyquest.reward.RewardApi;
 import polycube.polyquest.rotation.DailyRotationService;
 
 final class QuestLedgerTest {
+    @BeforeAll
+    static void bootstrapMinecraftRegistries() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
+
     @Test
     void codecPreservesPendingTransactionsAndClaims() {
         QuestLedger source = new QuestLedger();

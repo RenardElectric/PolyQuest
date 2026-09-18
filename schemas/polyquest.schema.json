@@ -206,15 +206,17 @@
     "moneyReward": {
       "title": "Money reward",
       "type": "object",
-      "required": ["type", "amount"],
+      "required": ["type", "amount", "formatted_amount", "currency"],
       "properties": {
         "type": { "const": "polyquest:money" },
         "amount": {
           "type": "string",
-          "pattern": "^[+]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?$",
-          "description": "A positive Java BigDecimal encoded as a string. Zero is rejected during catalog validation.",
-          "examples": ["10", "2.5"]
-        }
+          "pattern": "^[+]?[0-9]*[1-9][0-9]*$",
+          "description": "A positive Java BigInteger encoded as a string.",
+          "examples": ["10", "250"]
+        },
+        "formatted_amount": { "type": "string" },
+        "currency": { "$ref": "#/$defs/identifier" }
       },
       "additionalProperties": false
     },
@@ -234,16 +236,17 @@
       "required": ["type", "points"],
       "properties": {
         "type": { "const": "polyquest:experience" },
-        "points": { "type": "integer", "minimum": 1 }
+        "points": { "type": "integer", "minimum": 1, "maximum": 2147483647 }
       },
       "additionalProperties": false
     },
     "commandsReward": {
       "title": "Server-command reward",
       "type": "object",
-      "required": ["type", "commands"],
+      "required": ["type", "title", "commands"],
       "properties": {
         "type": { "const": "polyquest:commands" },
+        "title": { "type": "string" },
         "commands": {
           "type": "array",
           "minItems": 1,
@@ -550,7 +553,7 @@
     "questBody": {
       "title": "Inline PolyQuest quest",
       "type": "object",
-      "required": ["availability", "title", "condition", "rewards"],
+      "required": ["availability", "title", "icon", "condition", "rewards"],
       "properties": {
         "availability": { "enum": ["daily", "unique"] },
         "difficulty": { "enum": ["easy", "medium", "hard"] },
@@ -560,6 +563,7 @@
           "items": { "type": "string" },
           "default": []
         },
+        "icon": { "$ref": "#/$defs/identifier" },
         "condition": { "$ref": "#/$defs/condition" },
         "rewards": { "$ref": "#/$defs/rewardPlan" }
       },

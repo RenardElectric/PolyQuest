@@ -2,9 +2,15 @@ package polycube.polyquest.gui;
 
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
 import eu.pb4.sgui.api.gui.SimpleGui;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Items;
 import polycube.polycore.text.TextComponents;
@@ -21,6 +27,8 @@ public final class QuestGui extends SimpleGui {
     private QuestManager manager;
     @SuppressWarnings("NotNullFieldNotInitialized")
     private QuestManager.Subscription subscription;
+    private int tickCounter = 0;
+    private int interactionCooldown = 0;
 
     public QuestGui(ServerPlayer player) {
         super(MenuType.GENERIC_9x1, player, false);
@@ -29,6 +37,17 @@ public final class QuestGui extends SimpleGui {
 
         setSlot(8, createUniqueQuestsSlot());
         open();
+    }
+
+    @Override
+    public void onTick() {
+        if (tickCounter % 20 == 0) {
+            refresh();
+        }
+        tickCounter++;
+        if (interactionCooldown > 0) {
+            interactionCooldown--;
+        }
     }
 
     @Override
@@ -69,7 +88,10 @@ public final class QuestGui extends SimpleGui {
                 .addLoreLine(TextComponents.detail("Type", "One-time objectives", ChatFormatting.LIGHT_PURPLE))
                 .addLoreLine(TextComponents.detail("Rotation", "Never expires", ChatFormatting.GREEN))
                 .addLoreLine(TextComponents.styled("Each reward can only be claimed once.", ChatFormatting.DARK_GRAY))
-                .glow();
+                .glow()
+                .setCallback((_, _, _, _) -> {
+                    playSound(player, SoundEvents.UI_BUTTON_CLICK.value());
+                });
     }
 
     // Renders the player-facing quest presentation and retains the existing claim callback.
@@ -89,17 +111,25 @@ public final class QuestGui extends SimpleGui {
                 .addLoreLine(display.actionHint())
                 .setCallback((_, _, _, _) -> {
                     if (display.claimed()) return;
+                    if (interactionCooldown > 0) return;
                     var result = manager.claim(player, definition.id());
                     if (result.successful()) {
+                        playSound(player, SoundEvents.VILLAGER_YES);
                         player.sendSystemMessage(TextComponents.success("Successfully claimed quest: " + definition.title()));
                     } else {
+                        playSound(player, SoundEvents.VILLAGER_NO);
                         player.sendSystemMessage(TextComponents.error(result.message()));
                     }
+                    interactionCooldown = 20;
                 });
 
         if (display.claimed() || display.status() == QuestModel.AttemptStatus.READY_TO_CLAIM) {
             element.glow();
         }
         return element;
+    }
+
+    private static void playSound(ServerPlayer player, SoundEvent sound) {
+        player.connection.send(new ClientboundSoundPacket(BuiltInRegistries.SOUND_EVENT.wrapAsHolder(sound), SoundSource.PLAYERS, player.getX(), player.getY(), player.getZ(), 1.0f, 1.0f, player.getRandom().nextLong()));
     }
 }

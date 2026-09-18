@@ -78,10 +78,10 @@ public final class QuestDisplay {
             default -> ConditionStatus.DEFAULT;
         };
         List<Component> conditions = conditionLines(server, definition.condition(), conditionDiagnostic, forcedStatus);
-        int visibleConditions = Math.min(conditions.size(), MAX_CONDITION_LINES*100);
+        int visibleConditions = Math.min(conditions.size(), MAX_CONDITION_LINES);
         lines.addAll(conditions.subList(0, visibleConditions));
         if (conditions.size() > visibleConditions) {
-            lines.add(muted("  +" + (conditions.size() - visibleConditions) + " more objectives"));
+            lines.add(muted("  +" + (conditions.size() - visibleConditions) + " more objective lines"));
         }
 
         progress(definition.condition(), conditionDiagnostic, forcedStatus).ifPresent(value -> lines.add(progressLine(value, status)));

@@ -2,7 +2,6 @@ package polycube.polyquest.gui;
 
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
 import eu.pb4.sgui.api.gui.SimpleGui;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -19,32 +18,32 @@ import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.presentation.QuestDisplay;
 import polycube.polyquest.runtime.QuestManager;
 
-public final class QuestGui extends SimpleGui {
-    private static final Component TITLE = Component.literal("Quest GUI");
+import java.util.Comparator;
 
-    private final ServerPlayer player;
+public abstract class QuestGui extends SimpleGui {
+    private static final int REFRESH_INTERVAL_TICKS = 20;
+
+    protected final ServerPlayer player;
     @SuppressWarnings("NotNullFieldNotInitialized")
-    private QuestManager manager;
+    protected QuestManager manager;
     @SuppressWarnings("NotNullFieldNotInitialized")
     private QuestManager.Subscription subscription;
-    private int tickCounter = 0;
-    private int interactionCooldown = 0;
+    private int tickCounter;
+    private int interactionCooldown;
 
-    public QuestGui(ServerPlayer player) {
-        super(MenuType.GENERIC_9x1, player, false);
+    public QuestGui(MenuType<?> menuType, ServerPlayer player, Component title) {
+        super(menuType, player, false);
         this.player = player;
-        setTitle(TITLE);
-
-        setSlot(8, createUniqueQuestsSlot());
+        this.setTitle(title);
         open();
     }
 
     @Override
     public void onTick() {
-        if (tickCounter % 20 == 0) {
+        if (++tickCounter >= REFRESH_INTERVAL_TICKS) {
             refresh();
+            tickCounter = 0;
         }
-        tickCounter++;
         if (interactionCooldown > 0) {
             interactionCooldown--;
         }
@@ -63,39 +62,34 @@ public final class QuestGui extends SimpleGui {
     }
 
     @Override
+    public void onManualClose() {
+        subscription.close();
+        super.onManualClose();
+    }
+
+    @Override
+    public void onPlayerClose(boolean success) {
+        subscription.close();
+        super.onPlayerClose(success);
+    }
+
+    @Override
     public void close() {
         subscription.close();
         super.close();
     }
 
-    public void refresh() {
-        int slotIndex = 0;
-        for (var quest : manager.available(player.nameAndId())) {
-            if (quest.definition().availability() == QuestModel.Availability.UNIQUE) continue;
-            setSlot(slotIndex++, createQuestSlot(quest));
-        }
-    }
+    public abstract void refresh();
 
-    // Renders the unique quest collection in the last slot of the main quest GUI.
-    private GuiElementBuilder createUniqueQuestsSlot() {
+    protected static GuiElementBuilder createBackgroundSlot() {
         return new GuiElementBuilder()
-                .setItem(Items.BOOK)
+                .setItem(Items.STAINED_GLASS_PANE.black())
                 .hideDefaultTooltip()
-                .setName(TextComponents.styled("Unique Quests", ChatFormatting.LIGHT_PURPLE, true))
-                .addLoreLine(TextComponents.styled("Permanent quests for every player.", ChatFormatting.GRAY))
-                .addLoreLine(Component.empty())
-                .addLoreLine(TextComponents.section("UNIQUE QUESTS"))
-                .addLoreLine(TextComponents.detail("Type", "One-time objectives", ChatFormatting.LIGHT_PURPLE))
-                .addLoreLine(TextComponents.detail("Rotation", "Never expires", ChatFormatting.GREEN))
-                .addLoreLine(TextComponents.styled("Each reward can only be claimed once.", ChatFormatting.DARK_GRAY))
-                .glow()
-                .setCallback((_, _, _, _) -> {
-                    playSound(player, SoundEvents.UI_BUTTON_CLICK.value());
-                });
+                .setName(Component.empty());
     }
 
     // Renders the player-facing quest presentation and retains the existing claim callback.
-    private GuiElementBuilder createQuestSlot(QuestModel.Occurrence quest) {
+    protected GuiElementBuilder createQuestSlot(QuestModel.Occurrence quest) {
         var display = QuestDisplay.format(manager, player.level().getServer(), player.nameAndId(), quest);
         var definition = quest.definition();
         var element = new GuiElementBuilder()
@@ -129,7 +123,7 @@ public final class QuestGui extends SimpleGui {
         return element;
     }
 
-    private static void playSound(ServerPlayer player, SoundEvent sound) {
+    protected static void playSound(ServerPlayer player, SoundEvent sound) {
         player.connection.send(new ClientboundSoundPacket(BuiltInRegistries.SOUND_EVENT.wrapAsHolder(sound), SoundSource.PLAYERS, player.getX(), player.getY(), player.getZ(), 1.0f, 1.0f, player.getRandom().nextLong()));
     }
 }

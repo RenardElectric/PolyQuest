@@ -2,7 +2,6 @@ package polycube.polyquest.gui;
 
 import eu.pb4.sgui.api.elements.GuiElementBuilder;
 import eu.pb4.sgui.api.gui.SimpleGui;
-import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
@@ -18,8 +17,6 @@ import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.presentation.QuestDisplay;
 import polycube.polyquest.runtime.QuestManager;
 
-import java.util.Comparator;
-
 public abstract class QuestGui extends SimpleGui {
     private static final int REFRESH_INTERVAL_TICKS = 20;
 
@@ -31,6 +28,7 @@ public abstract class QuestGui extends SimpleGui {
     private int tickCounter;
     private int interactionCooldown;
 
+    @SuppressWarnings("this-escape")
     public QuestGui(MenuType<?> menuType, ServerPlayer player, Component title) {
         super(menuType, player, false);
         this.player = player;

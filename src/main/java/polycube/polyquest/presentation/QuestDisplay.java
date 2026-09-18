@@ -131,7 +131,7 @@ public final class QuestDisplay {
             case CompositeConditions.AllOf value when value.children().size() == 1 ->
                     appendCondition(
                             server, lines, value.children().getFirst(),
-                            indexedDiagnostic(diagnostic, "children", 0),
+                            indexedJson(diagnostic, "children", 0),
                             prefix, forcedStatus, depth
                     );
             case CompositeConditions.AllOf value -> {
@@ -140,7 +140,7 @@ public final class QuestDisplay {
                 for (int index : incompleteFirst(value.children().size(), diagnostic, "children", forcedStatus)) {
                     appendCondition(
                             server, lines, value.children().get(index),
-                            indexedDiagnostic(diagnostic, "children", index),
+                            indexedJson(diagnostic, "children", index),
                             "• ", forcedStatus, depth + 1
                     );
                 }
@@ -148,7 +148,7 @@ public final class QuestDisplay {
             case CompositeConditions.AnyOf value when value.children().size() == 1 ->
                     appendCondition(
                             server, lines, value.children().getFirst(),
-                            indexedDiagnostic(diagnostic, "children", 0),
+                            indexedJson(diagnostic, "children", 0),
                             prefix, forcedStatus, depth
                     );
             case CompositeConditions.AnyOf value -> {
@@ -156,7 +156,7 @@ public final class QuestDisplay {
                 for (int i = 0; i < value.children().size(); i++) {
                     appendCondition(
                             server, lines, value.children().get(i),
-                            indexedDiagnostic(diagnostic, "children", i),
+                            indexedJson(diagnostic, "children", i),
                             "• ", forcedStatus, depth + 1
                     );
                 }
@@ -166,7 +166,7 @@ public final class QuestDisplay {
                 lines.add(conditionRule(prefix, "Repeat " + value.times() + " times" + suffix + ":", status, depth));
                 appendCondition(
                         server, lines, value.child(),
-                        nestedDiagnostic(diagnostic, "child"),
+                        nestedJson(diagnostic, "child"),
                         "• ", forcedStatus, depth + 1
                 );
             }
@@ -176,7 +176,7 @@ public final class QuestDisplay {
                 for (int index : incompleteFirst(value.children().size(), diagnostic, "children", forcedStatus)) {
                     appendCondition(
                             server, lines, value.children().get(index),
-                            indexedDiagnostic(diagnostic, "children", index),
+                            indexedJson(diagnostic, "children", index),
                             (index + 1) + ". ", forcedStatus, depth + 1
                     );
                 }
@@ -186,8 +186,8 @@ public final class QuestDisplay {
                 var timeRemaining = !isActive ? "" : " • " + timeRemaining(server, diagnostic);
                 lines.add(conditionRule(prefix, "Within " + duration(value.durationTicks()) + attempts + timeRemaining + ":", status, depth));
 
-                var childDiagnostic = nestedDiagnostic(diagnostic, "child");
-                var startDiagnostic = nestedDiagnostic(diagnostic, "start_condition");
+                var childDiagnostic = nestedJson(diagnostic, "child");
+                var startDiagnostic = nestedJson(diagnostic, "start_condition");
                 var startActive = conditionActive(startDiagnostic, forcedStatus);
                 var childActive = conditionActive(childDiagnostic, forcedStatus);
                 if (value.startCondition().isPresent() && !startActive && childActive) {
@@ -214,7 +214,7 @@ public final class QuestDisplay {
                 for (int index : incompleteFirst(value.children().size(), diagnostic, "children", forcedStatus)) {
                     appendCondition(
                             server, lines, value.children().get(index),
-                            indexedDiagnostic(diagnostic, "children", index),
+                            indexedJson(diagnostic, "children", index),
                             "• ", forcedStatus, depth + 1
                     );
                 }
@@ -222,14 +222,14 @@ public final class QuestDisplay {
             case CompositeConditions.OptionalChild value -> {
                 lines.add(conditionRule(prefix, "Optional:", status, depth));
                 appendCondition(
-                        server, lines, value.child(), nestedDiagnostic(diagnostic, "child"),
+                        server, lines, value.child(), nestedJson(diagnostic, "child"),
                         "• ", forcedStatus, depth + 1);
             }
             case CompositeConditions.Choice value -> {
                 lines.add(conditionRule(prefix, "Choose one path:", status, depth));
                 for (int index : incompleteFirst(value.branches().size(), diagnostic, "branches", forcedStatus)) {
                     var branch = value.branches().get(index);
-                    JsonObject branchDiagnostic = indexedDiagnostic(diagnostic, "branches", index);
+                    JsonObject branchDiagnostic = indexedJson(diagnostic, "branches", index);
                     lines.add(conditionRule(
                             "• ",
                             branch.name() + ":",
@@ -314,7 +314,7 @@ public final class QuestDisplay {
             indices.add(index);
         }
 
-        indices.sort((left, right) -> Boolean.compare(conditionActive(indexedDiagnostic(diagnostic, field, right), forcedStatus), conditionActive(indexedDiagnostic(diagnostic, field, left), forcedStatus)));
+        indices.sort((left, right) -> Boolean.compare(conditionActive(indexedJson(diagnostic, field, right), forcedStatus), conditionActive(indexedJson(diagnostic, field, left), forcedStatus)));
         return indices;
     }
 

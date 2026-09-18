@@ -43,7 +43,7 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
     implementation include("eu.pb4:common-economy-api:${common_economy_api_version}")
     implementation include("eu.pb4:sgui:${sgui_version}")
-    implementation include("com.github.renardelectric:polycore:v${polycore_version}")
+    implementation include("com.github.renardelectric:polycore:${polycore_version}")
 
     testImplementation platform("org.junit:junit-bom:6.1.3")
     testImplementation "org.junit.jupiter:junit-jupiter"

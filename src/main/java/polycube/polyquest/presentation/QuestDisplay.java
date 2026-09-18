@@ -6,6 +6,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.NameAndId;
 import polycube.polyquest.commands.QuestCommandText;
 import polycube.polyquest.condition.BuiltInConditions;
@@ -39,57 +40,59 @@ public final class QuestDisplay {
     }
 
     /// Resolves live quest state and formats it for item lore or multiline chat output.
-    public static Presentation format(
-            QuestManager manager,
-            NameAndId player,
-            QuestModel.Occurrence occurrence
-    ) {
-        return new QuestDisplay(manager).format(player, occurrence);
+    public static Presentation format(QuestManager manager, MinecraftServer server, NameAndId player, QuestModel.Occurrence occurrence) {
+        return new QuestDisplay(manager).format(server, player, occurrence);
     }
 
-    private Presentation format(NameAndId player, QuestModel.Occurrence occurrence) {
-        QuestModel.Definition definition = occurrence.definition();
-        boolean claimed = manager.isClaimed(player, occurrence.key());
+    private Presentation format(MinecraftServer server, NameAndId player, QuestModel.Occurrence occurrence) {
+        var definition = occurrence.definition();
+        var claimed = manager.isClaimed(player, occurrence.key());
         var attempt = manager.attempt(player, occurrence);
-        QuestModel.AttemptStatus status = claimed
-                ? QuestModel.AttemptStatus.CLAIMED
-                : attempt.status();
-        boolean unavailable = !claimed && occurrence.availableUntil()
+        var status = claimed ? QuestModel.AttemptStatus.CLAIMED : attempt.status();
+        var unavailable = !claimed && occurrence.availableUntil()
                 .map(deadline -> !deadline.isAfter(Instant.now()))
                 .orElse(false);
-        JsonObject conditionDiagnostic = attempt.diagnostic().getAsJsonObject("condition");
+        var conditionDiagnostic = attempt.diagnostic().getAsJsonObject("condition");
 
         List<Component> lines = new ArrayList<>();
         for (String line : descriptionLines(definition.description(), DESCRIPTION_WIDTH, MAX_DESCRIPTION_LINES)) {
             lines.add(styled(line, ChatFormatting.GRAY));
         }
 
+        // Quest details section
+
         lines.add(Component.empty());
         lines.add(section("QUEST DETAILS"));
-        ChatFormatting nameColor = difficultyColor(definition.difficulty());
+        var nameColor = difficultyColor(definition.difficulty());
         lines.add(detail("Quest", QuestCommandText.availability(definition), nameColor));
         lines.add(detail("Expires", QuestCommandText.expiry(occurrence), ChatFormatting.WHITE));
+
+        // Objective section
+
         lines.add(Component.empty());
         lines.add(section("OBJECTIVE"));
 
-        List<Component> conditions = conditionLines(
-                definition.condition(),
-                conditionDiagnostic,
-                status == QuestModel.AttemptStatus.CLAIMED);
-        int visibleConditions = Math.min(conditions.size(), MAX_CONDITION_LINES);
+        var forcedStatus = switch (status) {
+            case CLAIMED -> ConditionStatus.CLAIMED;
+            case EXHAUSTED -> ConditionStatus.EXHAUSTED;
+            default -> ConditionStatus.DEFAULT;
+        };
+        List<Component> conditions = conditionLines(server, definition.condition(), conditionDiagnostic, forcedStatus);
+        int visibleConditions = Math.min(conditions.size(), MAX_CONDITION_LINES*100);
         lines.addAll(conditions.subList(0, visibleConditions));
         if (conditions.size() > visibleConditions) {
-            lines.add(styled(
-                    "  +" + (conditions.size() - visibleConditions) + " more objective details",
-                    ChatFormatting.DARK_GRAY));
+            lines.add(muted("  +" + (conditions.size() - visibleConditions) + " more objectives"));
         }
 
-        progress(definition.condition(), conditionDiagnostic)
-                .ifPresent(value -> lines.add(progressLine(value, status)));
+        progress(definition.condition(), conditionDiagnostic, forcedStatus).ifPresent(value -> lines.add(progressLine(value, status)));
         lines.add(detail(
                 "Status",
                 unavailable ? "Unavailable" : QuestCommandText.statusLabel(status),
-                unavailable ? ChatFormatting.RED : statusColor(status)));
+                unavailable ? ChatFormatting.RED : statusColor(status))
+        );
+
+        // Rewards section
+
         lines.add(Component.empty());
         lines.add(section("REWARDS"));
 
@@ -97,194 +100,227 @@ public final class QuestDisplay {
         int visibleRewards = Math.min(rewards.size(), MAX_REWARD_LINES);
         lines.addAll(rewards.subList(0, visibleRewards));
         if (rewards.size() > visibleRewards) {
-            lines.add(styled(
-                    "  +" + (rewards.size() - visibleRewards) + " more rewards",
-                    ChatFormatting.DARK_GRAY));
+            lines.add(muted("  +" + (rewards.size() - visibleRewards) + " more rewards"));
         }
 
         Component actionHint = styled(
                 actionHint(status, unavailable),
-                unavailable ? ChatFormatting.RED : statusColor(status));
+                unavailable ? ChatFormatting.RED : statusColor(status)
+        );
         return new Presentation(
                 questTitle(definition.title(), nameColor, status, unavailable),
-                lines,
-                actionHint,
-                status,
-                claimed,
-                unavailable);
+                lines, actionHint, status, claimed, unavailable
+        );
     }
 
-    private List<Component> conditionLines(ConditionApi.Definition condition, JsonObject diagnostic, boolean forceCompleted) {
+    private List<Component> conditionLines(MinecraftServer server, ConditionApi.Definition condition, JsonObject diagnostic, ConditionStatus forcedStatus) {
         List<Component> lines = new ArrayList<>();
-        appendCondition(lines, condition, diagnostic, "", forceCompleted);
+        appendCondition(server, lines, condition, diagnostic, "", forcedStatus, 0);
         return lines;
     }
 
     private void appendCondition(
-            List<Component> lines, ConditionApi.Definition condition,
-            JsonObject diagnostic, String prefix, boolean forceCompleted
+            MinecraftServer server, List<Component> lines,
+            ConditionApi.Definition condition,
+            JsonObject diagnostic, String prefix,
+            ConditionStatus forcedStatus, int depth
     ) {
-        boolean completed = conditionCompleted(diagnostic, forceCompleted);
+        var status = conditionStatus(diagnostic, forcedStatus);
+        var isActive = status == ConditionStatus.DEFAULT || status == ConditionStatus.ACTIVE;
         switch (condition) {
             case CompositeConditions.AllOf value when value.children().size() == 1 ->
                     appendCondition(
-                            lines,
-                            value.children().getFirst(),
+                            server, lines, value.children().getFirst(),
                             indexedDiagnostic(diagnostic, "children", 0),
-                            prefix,
-                            forceCompleted);
+                            prefix, forcedStatus, depth
+                    );
             case CompositeConditions.AllOf value -> {
-                lines.add(conditionRule(
-                        prefix,
-                        "Complete all " + count(value.children().size(), "objective") + ":",
-                        completed));
-                for (int index : incompleteFirst(value.children().size(), diagnostic, "children", forceCompleted)) {
+                var suffix = getProgressSummary(condition, diagnostic, status);
+                lines.add(conditionRule(prefix, "Complete all " + count(value.children().size(), "objective") + suffix + ":", status, depth));
+                for (int index : incompleteFirst(value.children().size(), diagnostic, "children", forcedStatus)) {
                     appendCondition(
-                            lines,
-                            value.children().get(index),
+                            server, lines, value.children().get(index),
                             indexedDiagnostic(diagnostic, "children", index),
-                            prefix + "  • ",
-                            forceCompleted);
+                            "• ", forcedStatus, depth + 1
+                    );
                 }
             }
             case CompositeConditions.AnyOf value when value.children().size() == 1 ->
                     appendCondition(
-                            lines,
-                            value.children().getFirst(),
+                            server, lines, value.children().getFirst(),
                             indexedDiagnostic(diagnostic, "children", 0),
-                            prefix,
-                            forceCompleted);
+                            prefix, forcedStatus, depth
+                    );
             case CompositeConditions.AnyOf value -> {
-                lines.add(conditionRule(prefix, "Complete any one:", completed));
-                for (int index : incompleteFirst(value.children().size(), diagnostic, "children", false)) {
+                lines.add(conditionRule(prefix, "Complete any one:", status, depth));
+                for (int i = 0; i < value.children().size(); i++) {
                     appendCondition(
-                            lines,
-                            value.children().get(index),
-                            indexedDiagnostic(diagnostic, "children", index),
-                            prefix + "  • ",
-                            false);
+                            server, lines, value.children().get(i),
+                            indexedDiagnostic(diagnostic, "children", i),
+                            "• ", forcedStatus, depth + 1
+                    );
                 }
             }
             case CompositeConditions.Repeat value -> {
-                lines.add(conditionRule(prefix, "Repeat " + value.times() + " times:", completed));
+                var suffix = getProgressSummary(condition, diagnostic, status);
+                lines.add(conditionRule(prefix, "Repeat " + value.times() + " times" + suffix + ":", status, depth));
                 appendCondition(
-                        lines,
-                        value.child(),
+                        server, lines, value.child(),
                         nestedDiagnostic(diagnostic, "child"),
-                        prefix + "  • ",
-                        forceCompleted);
+                        "• ", forcedStatus, depth + 1
+                );
             }
             case CompositeConditions.Sequence value -> {
-                lines.add(conditionRule(prefix, "Complete in order:", completed));
-                for (int index : incompleteFirst(value.children().size(), diagnostic, "children", forceCompleted)) {
+                var suffix = getProgressSummary(condition, diagnostic, status);
+                lines.add(conditionRule(prefix, "Complete in order" + suffix + ":", status, depth));
+                for (int index : incompleteFirst(value.children().size(), diagnostic, "children", forcedStatus)) {
                     appendCondition(
-                            lines,
-                            value.children().get(index),
+                            server, lines, value.children().get(index),
                             indexedDiagnostic(diagnostic, "children", index),
-                            prefix + "  " + (index + 1) + ". ",
-                            forceCompleted);
+                            (index + 1) + ". ", forcedStatus, depth + 1
+                    );
                 }
             }
             case CompositeConditions.TimeWindow value -> {
-                String attempts = completed ? "" : " • " + attemptsRemaining(value, diagnostic);
-                lines.add(conditionRule(
-                        prefix,
-                        "Within " + duration(value.durationTicks()) + attempts + ":",
-                        completed));
+                var attempts = attemptsRemaining(value, diagnostic);
+                var timeRemaining = !isActive ? "" : " • " + timeRemaining(server, diagnostic);
+                lines.add(conditionRule(prefix, "Within " + duration(value.durationTicks()) + attempts + timeRemaining + ":", status, depth));
 
-                JsonObject childDiagnostic = nestedDiagnostic(diagnostic, "child");
-                JsonObject startDiagnostic = nestedDiagnostic(diagnostic, "start_condition");
-                boolean startCompleted = conditionCompleted(startDiagnostic, forceCompleted);
-                boolean childCompleted = conditionCompleted(childDiagnostic, forceCompleted);
-                if (value.startCondition().isPresent() && startCompleted && !childCompleted) {
-                    appendCondition(lines, value.child(), childDiagnostic, prefix + "  • ", forceCompleted);
+                var childDiagnostic = nestedDiagnostic(diagnostic, "child");
+                var startDiagnostic = nestedDiagnostic(diagnostic, "start_condition");
+                var startActive = conditionActive(startDiagnostic, forcedStatus);
+                var childActive = conditionActive(childDiagnostic, forcedStatus);
+                if (value.startCondition().isPresent() && !startActive && childActive) {
+                    appendCondition(server, lines, value.child(), childDiagnostic, "• ", forcedStatus, depth + 1);
                     appendStartCondition(
-                            lines,
-                            value.startCondition().get(),
-                            startDiagnostic,
-                            prefix,
-                            forceCompleted);
+                            server, lines, value.startCondition().get(),
+                            startDiagnostic, forcedStatus, depth + 1
+                    );
                 } else {
                     value.startCondition().ifPresent(start -> appendStartCondition(
-                            lines,
-                            start,
-                            startDiagnostic,
-                            prefix,
-                            forceCompleted));
-                    appendCondition(lines, value.child(), childDiagnostic, prefix + "  • ", forceCompleted);
+                            server, lines, start, startDiagnostic,
+                            forcedStatus, depth + 1)
+                    );
+                    appendCondition(server, lines, value.child(), childDiagnostic, "• ", forcedStatus, depth + 1);
                 }
             }
             case CompositeConditions.NOfM value -> {
-                boolean allChildrenRequired = value.required() == value.children().size();
+                var suffix = getProgressSummary(condition, diagnostic, status);
                 lines.add(conditionRule(
                         prefix,
-                        "Complete " + value.required() + " of " + count(value.children().size(), "objective") + ":",
-                        completed));
-                boolean forceChildren = forceCompleted && allChildrenRequired;
-                for (int index : incompleteFirst(value.children().size(), diagnostic, "children", forceChildren)) {
+                        "Complete " + value.required() + " of " + count(value.children().size(), "objective") + suffix + ":",
+                        status, depth)
+                );
+                for (int index : incompleteFirst(value.children().size(), diagnostic, "children", forcedStatus)) {
                     appendCondition(
-                            lines,
-                            value.children().get(index),
+                            server, lines, value.children().get(index),
                             indexedDiagnostic(diagnostic, "children", index),
-                            prefix + "  • ",
-                            forceChildren);
+                            "• ", forcedStatus, depth + 1
+                    );
                 }
             }
             case CompositeConditions.OptionalChild value -> {
-                lines.add(conditionRule(prefix, "Optional:", completed));
+                lines.add(conditionRule(prefix, "Optional:", status, depth));
                 appendCondition(
-                        lines,
-                        value.child(),
-                        nestedDiagnostic(diagnostic, "child"),
-                        prefix + "  • ",
-                        false);
+                        server, lines, value.child(), nestedDiagnostic(diagnostic, "child"),
+                        "• ", forcedStatus, depth + 1);
             }
             case CompositeConditions.Choice value -> {
-                lines.add(conditionRule(prefix, "Choose one path:", completed));
-                boolean forceOnlyBranch = forceCompleted && value.branches().size() == 1;
-                for (int index : incompleteFirst(value.branches().size(), diagnostic, "branches", forceOnlyBranch)) {
+                lines.add(conditionRule(prefix, "Choose one path:", status, depth));
+                for (int index : incompleteFirst(value.branches().size(), diagnostic, "branches", forcedStatus)) {
                     var branch = value.branches().get(index);
                     JsonObject branchDiagnostic = indexedDiagnostic(diagnostic, "branches", index);
                     lines.add(conditionRule(
-                            prefix + "  • ",
+                            "• ",
                             branch.name() + ":",
-                            conditionCompleted(branchDiagnostic, forceOnlyBranch)));
+                            conditionStatus(branchDiagnostic, forcedStatus), depth + 1));
                     appendCondition(
-                            lines,
-                            branch.condition(),
-                            branchDiagnostic,
-                            prefix + "    ",
-                            forceOnlyBranch);
+                            server, lines,
+                            branch.condition(), branchDiagnostic,
+                            "• ", forcedStatus, depth + 2);
                 }
             }
-            default -> lines.add(styled(
-                    prefix + conditionSummary(condition) + (completed ? " ✓" : ""),
-                    completed ? ChatFormatting.GREEN : ChatFormatting.WHITE));
+            default -> {
+                var suffix = getProgressSummary(condition, diagnostic, status);
+                lines.add(conditionFormat(prefix, conditionSummary(condition) + suffix, ChatFormatting.WHITE, ChatFormatting.WHITE, status, depth));
+            }
         }
     }
 
-    private static String attemptsRemaining(
-            CompositeConditions.TimeWindow condition,
-            JsonObject diagnostic
-    ) {
-        int limit = condition.timeoutAction() == CompositeConditions.TimeoutAction.EXHAUST
-                ? 1
-                : condition.maxAttempts();
-        if (limit == 0) {
-            return "unlimited attempts";
-        }
-        int attemptsUsed = diagnostic.has("attempts")
-                ? diagnostic.get("attempts").getAsInt()
-                : 0;
-        return count(Math.max(0, limit - attemptsUsed), "attempt") + " left";
+    private static String attemptsRemaining(CompositeConditions.TimeWindow condition, JsonObject diagnostic) {
+        int limit = condition.timeoutAction() == CompositeConditions.TimeoutAction.EXHAUST ? 1 : condition.maxAttempts();
+        if (limit == 0) return "";
+        int attemptsUsed = diagnostic.has("attempts") ? diagnostic.get("attempts").getAsInt() : 0;
+        return " • " + count(Math.max(0, limit - attemptsUsed), "attempt") + " left";
+    }
+
+    private static String timeRemaining(MinecraftServer server, JsonObject diagnostic) {
+        if (!diagnostic.has("deadline")) return "no time limit";
+        long deadline = diagnostic.get("deadline").getAsLong();
+        if (deadline <= 0) return "not started";
+        long remainingTicks = Math.max(0, deadline - server.getTickCount());
+        return duration(remainingTicks) + " remaining";
     }
 
     private void appendStartCondition(
-            List<Component> lines, ConditionApi.Definition condition,
-            JsonObject diagnostic, String prefix, boolean forceCompleted
+            MinecraftServer server, List<Component> lines,
+            ConditionApi.Definition condition, JsonObject diagnostic,
+            ConditionStatus forcedStatus, int depth
     ) {
-        lines.add(conditionRule(prefix + "  ", "Start when:", conditionCompleted(diagnostic, forceCompleted)));
-        appendCondition(lines, condition, diagnostic, prefix + "    • ", forceCompleted);
+        lines.add(conditionRule("• ", "Start when:", forcedStatus, depth));
+        appendCondition(server, lines, condition, diagnostic, "• ", forcedStatus, depth + 1);
+    }
+
+    private static Component conditionRule(String prefix, String text, ConditionStatus status, int depth) {
+        return conditionFormat(prefix, text, ChatFormatting.DARK_GRAY, ChatFormatting.GRAY, status, depth);
+    }
+
+    private static MutableComponent conditionFormat(String prefix, String text, ChatFormatting prefixColor, ChatFormatting titleColor, ConditionStatus status, int depth) {
+        var suffix = switch (status) {
+            case CLAIMED -> " ✓";
+            case EXHAUSTED -> " ✕";
+            default -> "";
+        };
+        var tColor = switch (status) {
+            case CLAIMED -> ChatFormatting.GREEN;
+            case EXHAUSTED -> ChatFormatting.RED;
+            default -> titleColor;
+        };
+        var pColor = switch (status) {
+            case CLAIMED -> ChatFormatting.GREEN;
+            case EXHAUSTED -> ChatFormatting.RED;
+            default -> prefixColor;
+        };
+        return styled("   ".repeat(depth) + prefix, pColor).append(styled(text + suffix, tColor));
+    }
+
+    private String getProgressSummary(ConditionApi.Definition condition, JsonObject diagnostic, ConditionStatus status) {
+        return progress(condition, diagnostic, status)
+                .map(value -> " (" + value.current() + "/" + value.target() + ")")
+                .orElse("");
+    }
+
+    private static ConditionStatus conditionStatus(JsonObject diagnostic, ConditionStatus forceStatus) {
+        if (forceStatus != ConditionStatus.DEFAULT) return forceStatus;
+        if (diagnostic.has("exhausted") && diagnostic.get("exhausted").getAsBoolean()) return ConditionStatus.EXHAUSTED;
+        if (diagnostic.has("completed") && diagnostic.get("completed").getAsBoolean()) return ConditionStatus.CLAIMED;
+        return ConditionStatus.DEFAULT;
+    }
+
+    private static List<Integer> incompleteFirst(int size, JsonObject diagnostic, String field, ConditionStatus forcedStatus) {
+        List<Integer> indices = new ArrayList<>(size);
+
+        for(int index = 0; index < size; ++index) {
+            indices.add(index);
+        }
+
+        indices.sort((left, right) -> Boolean.compare(conditionActive(indexedDiagnostic(diagnostic, field, right), forcedStatus), conditionActive(indexedDiagnostic(diagnostic, field, left), forcedStatus)));
+        return indices;
+    }
+
+    private static boolean conditionActive(JsonObject diagnostic, ConditionStatus forceStatus) {
+        var status = conditionStatus(diagnostic, forceStatus);
+        return status == ConditionStatus.DEFAULT || status == ConditionStatus.ACTIVE;
     }
 
     private String conditionSummary(ConditionApi.Definition condition) {
@@ -315,10 +351,8 @@ public final class QuestDisplay {
         };
     }
 
-    private static Optional<Progress> progress(
-            ConditionApi.Definition condition,
-            JsonObject diagnostic
-    ) {
+    private static Optional<Progress> progress(ConditionApi.Definition condition, JsonObject diagnostic, ConditionStatus status) {
+        if (status == ConditionStatus.CLAIMED || status == ConditionStatus.EXHAUSTED) return Optional.empty();
         if (diagnostic.has("current") && diagnostic.has("target")) {
             return Optional.of(new Progress(diagnostic.get("current").getAsInt(), diagnostic.get("target").getAsInt()));
         }
@@ -328,9 +362,9 @@ public final class QuestDisplay {
             case CompositeConditions.AllOf value -> Optional.of(new Progress(completedChildren(diagnostic), value.children().size()));
             case CompositeConditions.AnyOf ignored -> Optional.of(new Progress(diagnostic.get("completed").getAsBoolean() ? 1 : 0, 1));
             case CompositeConditions.Sequence value -> Optional.of(new Progress(completedChildren(diagnostic), value.children().size()));
-            case CompositeConditions.TimeWindow value -> progress(value.child(), diagnostic.getAsJsonObject("child"));
+            case CompositeConditions.TimeWindow value -> progress(value.child(), diagnostic.getAsJsonObject("child"), status);
             case CompositeConditions.NOfM value -> Optional.of(new Progress(Math.min(completedChildren(diagnostic), value.required()), value.required()));
-            case CompositeConditions.OptionalChild value -> progress(value.child(), diagnostic.getAsJsonObject("child"));
+            case CompositeConditions.OptionalChild value -> progress(value.child(), diagnostic.getAsJsonObject("child"), status);
             case CompositeConditions.Choice ignored -> Optional.of(new Progress(diagnostic.get("completed").getAsBoolean() ? 1 : 0, 1));
             default -> Optional.of(new Progress(diagnostic.get("completed").getAsBoolean() ? 1 : 0, 1));
         };
@@ -381,7 +415,7 @@ public final class QuestDisplay {
 
     private static Component rewardLine(RewardApi.Definition reward) {
         return switch (reward) {
-            case BuiltInRewards.Money value -> bullet(value.amount().toPlainString() + " money");
+            case BuiltInRewards.Money value -> bullet(value.formatedAmount());
             case BuiltInRewards.Experience value -> bullet(value.points() + " experience points");
             case BuiltInRewards.Item value -> {
                 var stack = value.stackTemplate().create();
@@ -390,7 +424,7 @@ public final class QuestDisplay {
                                 .withColor(ChatFormatting.GREEN)
                                 .withItalic(false)));
             }
-            case BuiltInRewards.ServerCommands ignored -> bullet("Special server reward");
+            case BuiltInRewards.ServerCommands commands -> bullet(commands.title());
             default -> bullet(humanize(reward.type().id()));
         };
     }
@@ -400,13 +434,13 @@ public final class QuestDisplay {
             QuestModel.AttemptStatus status, boolean unavailable
     ) {
         MutableComponent result = styled(title, titleColor, true);
-        if (unavailable) return result.append(styled("  ✕", ChatFormatting.RED, true));
+        if (unavailable) return result.append(styled(" ✕", ChatFormatting.RED, true));
         return switch (status) {
             case ACTIVE -> result;
-            case READY_TO_CLAIM -> result.append(styled("  !", ChatFormatting.GREEN, true));
-            case CLAIM_PENDING -> result.append(styled("  ↻", ChatFormatting.YELLOW, true));
-            case CLAIMED -> result.append(styled("  ✓", ChatFormatting.GOLD, true));
-            case EXHAUSTED -> result.append(styled("  ✕", ChatFormatting.RED, true));
+            case READY_TO_CLAIM -> result.append(styled(" !", statusColor(status), true));
+            case CLAIM_PENDING -> result.append(styled(" ↻", statusColor(status), true));
+            case CLAIMED -> result.append(styled(" ✓", statusColor(status), true));
+            case EXHAUSTED -> result.append(styled(" ✕", statusColor(status), true));
         };
     }
 
@@ -451,4 +485,6 @@ public final class QuestDisplay {
     }
 
     private record Progress(int current, int target) {}
+
+    private enum ConditionStatus {DEFAULT, ACTIVE, CLAIMED, EXHAUSTED}
 }

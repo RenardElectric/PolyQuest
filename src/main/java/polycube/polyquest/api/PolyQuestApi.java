@@ -19,14 +19,6 @@ import java.util.List;
 public final class PolyQuestApi {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    /// Installs the server's Common Economy API adapter.
-    ///
-    /// The transaction ID must be treated idempotently by the adapter: depositing twice
-    /// with the same ID must not credit the account twice.
-    public static void setEconomyGateway(RewardApi.EconomyGateway gateway) {
-        RewardApi.setEconomyGateway(gateway);
-    }
-
     /// Returns the server's Common Economy API adapter, if installed.
     public static DataResult<QuestManager> manager() {
         return QuestRuntime.manager()

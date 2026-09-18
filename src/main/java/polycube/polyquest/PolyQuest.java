@@ -51,7 +51,8 @@ public final class PolyQuest implements ModInitializer {
                 new InspectCommand(),
                 new SignalCommand(),
                 new RerollCommand(),
-                new ResetCommand()
+                new ResetCommand(),
+                new GuiCommand()
         );
 
         LOGGER.info("PolyQuest initialized");

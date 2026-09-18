@@ -9,7 +9,7 @@ import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.reward.BuiltInRewards;
 import polycube.polyquest.reward.RewardApi;
 
-import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.*;
 
 /// Semantic validation performed after codec decoding and template expansion.
@@ -57,10 +57,10 @@ public final class QuestDefinitionValidator {
 
     private void validateReward(RewardApi.Definition definition, String path, List<String> errors) {
         switch (definition) {
-            case BuiltInRewards.Money(BigDecimal amount) when amount.signum() <= 0 -> errors.add(path + ": amount must be positive");
+            case BuiltInRewards.Money(BigInteger amount, String _, Identifier _) when amount.signum() <= 0 -> errors.add(path + ": amount must be positive");
             case BuiltInRewards.Item(ItemStackTemplate stackTemplate) when stackTemplate.count() <= 0 -> errors.add(path + ": stack cannot be empty");
             case BuiltInRewards.Experience(int points) when points <= 0 -> errors.add(path + ": points must be positive");
-            case BuiltInRewards.ServerCommands(List<String> commands1) -> {
+            case BuiltInRewards.ServerCommands(String _, List<String> commands1) -> {
                 if (commands1.isEmpty()) {
                     errors.add(path + ": at least one command is required");
                 }

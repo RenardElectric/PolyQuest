@@ -53,8 +53,7 @@ public final class QuestAttempt {
         if (terminal()) {
             return ConditionRuntime.Update.NONE;
         }
-        ConditionRuntime.Update update = root.tick(
-                new ConditionRuntime.EvaluationContext(server, serverTick));
+        ConditionRuntime.Update update = root.tick(new ConditionRuntime.EvaluationContext(server, serverTick));
         if (update.changed()) {
             lastUpdatedTick = serverTick;
         }

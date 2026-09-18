@@ -8,7 +8,6 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import org.jspecify.annotations.Nullable;
 
-import java.math.BigDecimal;
 import java.util.*;
 
 /// Data-driven rewards and their runtime grant adapters.
@@ -50,12 +49,6 @@ public final class RewardApi {
         }
     }
 
-    /// Economy bridge implemented by the server's Common Economy API provider adapter.
-    @FunctionalInterface
-    public interface EconomyGateway {
-        GrantResult deposit(UUID playerId, BigDecimal amount, String transactionId);
-    }
-
     public record Plan(Optional<Identifier> profile, List<Definition> inlineRewards) {
         public static final Codec<Plan> CODEC = com.mojang.serialization.codecs.RecordCodecBuilder.create(instance -> instance.group(
                 Identifier.CODEC.optionalFieldOf("profile").forGetter(Plan::profile),
@@ -74,22 +67,12 @@ public final class RewardApi {
     }
 
     private static final Map<Identifier, Type<?>> TYPES = new LinkedHashMap<>();
-    private static EconomyGateway economyGateway = (player, amount, transaction) ->
-            GrantResult.retryLater("No economy gateway has been registered");
 
     public static synchronized <D extends Definition> Type<D> register(Type<D> type) {
         if (TYPES.putIfAbsent(type.id(), type) != null) {
             throw new IllegalStateException("Duplicate reward type " + type.id());
         }
         return type;
-    }
-
-    public static synchronized void setEconomyGateway(EconomyGateway gateway) {
-        economyGateway = gateway;
-    }
-
-    public static EconomyGateway economyGateway() {
-        return economyGateway;
     }
 
     public static Map<Identifier, Type<?>> types() {

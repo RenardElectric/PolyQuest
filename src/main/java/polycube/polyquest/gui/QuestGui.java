@@ -63,9 +63,9 @@ public final class QuestGui extends SimpleGui {
                 .setItem(Items.BOOK)
                 .hideDefaultTooltip()
                 .setName(TextComponents.styled("Unique Quests", ChatFormatting.LIGHT_PURPLE, true))
-                .addLoreLine(TextComponents.styled("Permanent adventures for every player.", ChatFormatting.GRAY))
+                .addLoreLine(TextComponents.styled("Permanent quests for every player.", ChatFormatting.GRAY))
                 .addLoreLine(Component.empty())
-                .addLoreLine(TextComponents.styled("UNIQUE QUESTS", ChatFormatting.GOLD, true))
+                .addLoreLine(TextComponents.section("UNIQUE QUESTS"))
                 .addLoreLine(TextComponents.detail("Type", "One-time objectives", ChatFormatting.LIGHT_PURPLE))
                 .addLoreLine(TextComponents.detail("Rotation", "Never expires", ChatFormatting.GREEN))
                 .addLoreLine(TextComponents.styled("Each reward can only be claimed once.", ChatFormatting.DARK_GRAY))
@@ -74,7 +74,7 @@ public final class QuestGui extends SimpleGui {
 
     // Renders the player-facing quest presentation and retains the existing claim callback.
     private GuiElementBuilder createQuestSlot(QuestModel.Occurrence quest) {
-        var display = QuestDisplay.format(manager, player.nameAndId(), quest);
+        var display = QuestDisplay.format(manager, player.level().getServer(), player.nameAndId(), quest);
         var definition = quest.definition();
         var element = new GuiElementBuilder()
                 .setItem(definition.icon())

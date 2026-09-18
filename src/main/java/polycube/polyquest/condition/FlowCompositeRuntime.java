@@ -223,8 +223,7 @@ final class FlowCompositeRuntime {
                 return timeout;
             }
 
-            if (definition.startPolicy() == CompositeConditions.StartPolicy.START_CONDITION
-                    && deadline < 0L) {
+            if (definition.startPolicy() == CompositeConditions.StartPolicy.START_CONDITION && deadline < 0L) {
                 ConditionRuntime.Instance start = startCondition.orElseThrow();
                 ConditionRuntime.Update startUpdate = start.onSignal(signal, context);
                 if (start.completed()) {
@@ -249,8 +248,7 @@ final class FlowCompositeRuntime {
             if (exhausted || child.completed()) {
                 return timeout;
             }
-            if (definition.startPolicy() == CompositeConditions.StartPolicy.START_CONDITION
-                    && deadline < 0L) {
+            if (definition.startPolicy() == CompositeConditions.StartPolicy.START_CONDITION && deadline < 0L) {
                 ConditionRuntime.Instance start = startCondition.orElseThrow();
                 ConditionRuntime.Update startUpdate = start.tick(context);
                 if (start.completed()) {

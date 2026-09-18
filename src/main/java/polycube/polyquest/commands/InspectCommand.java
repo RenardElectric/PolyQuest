@@ -59,7 +59,7 @@ public final class InspectCommand extends PolyCommand {
         var manager = CommandResult.require(PolyQuestApi.manager());
         QuestModel.Occurrence occurrence = CommandResult.require(PolyQuestApi.quest(player, id));
         QuestModel.Definition quest = occurrence.definition();
-        var display = QuestDisplay.format(manager, player, occurrence);
+        var display = QuestDisplay.format(manager, source.getServer(), player, occurrence);
 
         var message = TextComponents.message().append(display.title());
         for (Component line : display.lines()) {

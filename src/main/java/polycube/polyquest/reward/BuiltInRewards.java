@@ -1,36 +1,43 @@
 package polycube.polyquest.reward;
 
+import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import eu.pb4.common.economy.api.CommonEconomy;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.permissions.PermissionSet;
 import net.minecraft.util.Prediction;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemStackTemplate;
 import polycube.polyquest.PolyQuest;
 
-import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.List;
 
 /// Built-in money, item, experience, and server-command rewards.
 public final class BuiltInRewards {
-    private static final Codec<BigDecimal> DECIMAL_CODEC = Codec.STRING.comapFlatMap(
-            value -> {
-                try {
-                    return com.mojang.serialization.DataResult.success(new BigDecimal(value));
-                } catch (NumberFormatException exception) {
-                    return com.mojang.serialization.DataResult.error(() -> "Invalid decimal '" + value + "'");
-                }
-            },
-            BigDecimal::toPlainString);
+    private static final Codec<BigInteger> BIG_INTEGER_CODEC =
+            Codec.STRING.comapFlatMap(
+                    value -> {
+                        try {
+                            return DataResult.success(new BigInteger(value));
+                        } catch (NumberFormatException exception) {
+                            return DataResult.error(() -> "Invalid BigInteger: " + value);
+                        }
+                    },
+                    BigInteger::toString
+            );
 
-    public record Money(BigDecimal amount) implements RewardApi.Definition {
+    public record Money(BigInteger amount, String formatedAmount, Identifier currency) implements RewardApi.Definition {
         public static final MapCodec<Money> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
-                DECIMAL_CODEC.fieldOf("amount").forGetter(Money::amount)
+                BIG_INTEGER_CODEC.fieldOf("amount").forGetter(Money::amount),
+                Codec.STRING.fieldOf("formatted_amount").forGetter(Money::formatedAmount),
+                Identifier.CODEC.fieldOf("currency").forGetter(Money::currency)
         ).apply(instance, Money::new));
 
         public static final RewardApi.Type<Money> TYPE = new RewardApi.Type<>(PolyQuest.id("money"), CODEC, BuiltInRewards::grantMoney);
@@ -67,12 +74,13 @@ public final class BuiltInRewards {
         }
     }
 
-    public record ServerCommands(List<String> commands) implements RewardApi.Definition {
+    public record ServerCommands(String title, List<String> commands) implements RewardApi.Definition {
         public ServerCommands {
             commands = List.copyOf(commands);
         }
 
         public static final MapCodec<ServerCommands> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                Codec.STRING.fieldOf("title").forGetter(ServerCommands::title),
                 Codec.STRING.listOf().fieldOf("commands").forGetter(ServerCommands::commands)
         ).apply(instance, ServerCommands::new));
 
@@ -95,11 +103,35 @@ public final class BuiltInRewards {
         if (reward.amount().signum() <= 0) {
             return RewardApi.GrantResult.permanentFailure("Money reward amount must be positive");
         }
-        return RewardApi.economyGateway().deposit(context.playerId(), reward.amount(), context.idempotencyKey());
+
+        var currencyId = reward.currency();
+
+        var provider = CommonEconomy.getProvider(currencyId.getNamespace());
+        if (provider == null) {
+            return RewardApi.GrantResult.retryLater("No economy provider found");
+        }
+
+        var currency = provider.getCurrency(context.server(), currencyId.getPath());
+        if (currency == null) {
+            return RewardApi.GrantResult.retryLater("Currency not found");
+        }
+
+        var profile = new GameProfile(context.playerId(), context.onlinePlayer() != null ? context.onlinePlayer().getScoreboardName() : context.playerId().toString());
+        var account = provider.getDefaultAccount(context.server(), profile, currency);
+        if (account == null) {
+            return RewardApi.GrantResult.retryLater("Player has no default account for currency " + currency.id());
+        }
+
+        var result = account.decreaseBalance(reward.amount());
+        if (result.isFailure()) {
+            return RewardApi.GrantResult.retryLater("Failed to grant money: " + result.message());
+        }
+
+        return RewardApi.GrantResult.success();
     }
 
     private static RewardApi.GrantResult grantItem(Item reward, RewardApi.Context context) {
-        ServerPlayer player = context.onlinePlayer();
+        var player = context.onlinePlayer();
         if (player == null) {
             return RewardApi.GrantResult.retryLater("Player must be online for an item reward");
         }
@@ -112,7 +144,7 @@ public final class BuiltInRewards {
     }
 
     private static RewardApi.GrantResult grantExperience(Experience reward, RewardApi.Context context) {
-        ServerPlayer player = context.onlinePlayer();
+        var player = context.onlinePlayer();
         if (player == null) {
             return RewardApi.GrantResult.retryLater("Player must be online for an experience reward");
         }
@@ -124,7 +156,7 @@ public final class BuiltInRewards {
     }
 
     private static RewardApi.GrantResult grantCommands(ServerCommands reward, RewardApi.Context context) {
-        ServerPlayer player = context.onlinePlayer();
+        var player = context.onlinePlayer();
         if (player == null) {
             return RewardApi.GrantResult.retryLater("Player must be online for command rewards");
         }

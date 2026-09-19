@@ -13,7 +13,7 @@ import polycube.polyquest.model.QuestModel;
 import java.util.Comparator;
 
 public final class UniqueQuestGui  extends QuestGui {
-    private static final Component TITLE = TextComponents.styled("Unique Quests", ChatFormatting.LIGHT_PURPLE, true);
+    private static final Component TITLE = TextComponents.styled("Unique Quests", ChatFormatting.LIGHT_PURPLE, true).withStyle(s -> s.withShadowColor(0xFF000000));
     private static final int MENU_SIZE = 9 * 2;
     private static final int BACKGROUND_START_SLOT = 9;
     private static final int BACK_SLOT = 9;

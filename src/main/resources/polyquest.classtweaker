@@ -1,0 +1,3 @@
+classTweaker  v1  official
+
+accessible method net/minecraft/world/item/component/ResolvableProfile$Static <init> (Lcom/mojang/datafixers/util/Either;Lnet/minecraft/world/entity/player/PlayerSkin$Patch;)V

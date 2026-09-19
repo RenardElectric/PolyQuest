@@ -16,13 +16,14 @@
       "polycube.polyquest.PolyQuest"
     ]
   },
+  "mixins": [
+    "polyquest.mixins.json"
+  ],
   "depends": {
     "java": ">=${java_version}",
     "minecraft": "${minecraft_version}",
     "fabricloader": ">=${loader_version}",
     "fabric-api": ">=${fabric_api_version}"
   },
-  "mixins": [
-    "polyquest.mixins.json"
-  ]
+  "accessWidener": "polyquest.classtweaker"
 }

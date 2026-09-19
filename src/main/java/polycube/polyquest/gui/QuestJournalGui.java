@@ -13,7 +13,7 @@ import polycube.polyquest.model.QuestModel;
 import java.util.Comparator;
 
 public final class QuestJournalGui extends QuestGui {
-    private static final Component TITLE = TextComponents.styled("Quest Journal", ChatFormatting.GOLD, true);
+    private static final Component TITLE = TextComponents.styled("Quest Journal", ChatFormatting.GOLD, true).withStyle(s -> s.withShadowColor(0xFF000000));
     private static final int MENU_SIZE = 9 * 3;
     private static final int UNIQUE_QUEST_SLOT = 26;
     private static final int[] DAILY_QUEST_SLOTS = {11, 13, 15};

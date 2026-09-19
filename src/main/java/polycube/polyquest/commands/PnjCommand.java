@@ -67,6 +67,7 @@ public final class PnjCommand extends PolyCommand {
 
     private static int spawn(CommandSourceStack source, Vec3 pos, Vec2 rotation) {
 
+        // skin from: https://www.minecraftskins.com/skin/24256690/fundy-explorer/
         var skinPatch = PlayerSkin.Patch.create(
                 Optional.of(new ClientAsset.ResourceTexture.ResourceTexture(PolyQuest.id("quest_giver_skin"))),
                 Optional.empty(), Optional.empty(),

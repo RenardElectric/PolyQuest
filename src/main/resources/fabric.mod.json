@@ -3,7 +3,7 @@
   "id": "${mod_id}",
   "version": "${mod_version}",
   "name": "${mod_name}",
-  "description": "A server-side, data-driven quest engine for Fabric.",
+  "description": "PolyQuest - Data-driven daily and one-time quests.",
   "authors": [
     "RenardElectric"
   ],

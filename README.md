@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="src/main/resources/assets/polyquest/icon.png" alt="PolyQuest logo" width="128">
+  <img src=".github/images/logo.png" alt="PolyQuest logo">
 </p>
 
 <h1 align="center">PolyQuest</h1>
 
 <p align="center">
-  <strong>Data-driven daily and one-time quests for Fabric servers.</strong>
+  <strong>PolyQuest - Data-driven daily and one-time quests.</strong>
 </p>
 
 <p align="center">

@@ -1,0 +1,141 @@
+name: Release
+run-name: Release v${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without a leading v (for example, 1.2.3 or 1.2.3-beta.1)
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare release commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Validate and prepare release
+        id: release
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/prepare-release.sh
+
+  release-notes:
+    name: Generate release notes
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      copilot-requests: write
+
+    steps:
+      - name: Check out release commit without write credentials
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare isolated Copilot workspace
+        id: context
+        env:
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: bash .github/scripts/prepare-release-context.sh
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install GitHub Copilot CLI
+        run: npm install --global @github/copilot@1
+
+      - name: Generate release notes with Copilot
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/generate-release-notes.sh
+
+      - name: Verify Copilot changed only the release notes
+        run: bash .github/scripts/verify-release-notes.sh
+
+      - name: Finalize release notes
+        env:
+          PREVIOUS_TAG: ${{ steps.context.outputs.previous_tag }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: bash .github/scripts/finalize-release-notes.sh
+
+      - name: Upload release notes
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes-${{ needs.prepare.outputs.tag }}
+          path: .release-ai/release-notes.md
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    name: Build release artifacts
+    needs: prepare
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build.yml
+    with:
+      checkout_ref: ${{ needs.prepare.outputs.sha }}
+
+  publish:
+    name: Publish ${{ needs.prepare.outputs.tag }}
+    needs:
+      - prepare
+      - release-notes
+      - build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+          path: release-assets
+
+      - name: Download release notes
+        uses: actions/download-artifact@v8
+        with:
+          name: release-notes-${{ needs.prepare.outputs.tag }}
+          path: release-inputs
+
+      - name: Verify and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MOD_NAME: ${{ needs.build.outputs.mod_name }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          TARGET_SHA: ${{ needs.prepare.outputs.sha }}
+        run: bash .github/scripts/publish-release.sh

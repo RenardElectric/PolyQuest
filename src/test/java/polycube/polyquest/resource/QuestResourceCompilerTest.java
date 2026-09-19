@@ -149,6 +149,5 @@ final class QuestResourceCompilerTest {
         assertTrue(catalog.quests().containsKey(questId));
         QuestModel.Definition quest = Objects.requireNonNull(catalog.quests().get(questId));
         assertEquals("d9692ca68241ac0a62a547fc7bf268bf663727125fc8b6b78163d49bf81be9f8", quest.behaviorHash());
-        assertEquals("f145bb3187799f28209dc5f33455e9351c04648fe763436e751676cfc2c9b5f2", quest.presentationHash());
     }
 }

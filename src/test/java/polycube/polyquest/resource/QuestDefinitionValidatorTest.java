@@ -55,8 +55,7 @@ final class QuestDefinitionValidatorTest {
                 Items.DIAMOND,
                 condition,
                 new RewardApi.Plan(Optional.empty(), List.of()),
-                "behavior",
-                "presentation");
+                "behavior");
 
         List<String> errors = new QuestDefinitionValidator().validate(quest, Map.of());
 

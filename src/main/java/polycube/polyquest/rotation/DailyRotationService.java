@@ -24,7 +24,7 @@ public final class DailyRotationService {
     }
 
     /// Rebuilds today's slots while preserving valid same-generation selections across reloads.
-    public boolean refresh(QuestModel.Catalog catalog, QuestLedger ledger) {
+    public RefreshResult refresh(QuestModel.Catalog catalog, QuestLedger ledger) {
         ZoneId zone = config.timeZone();
         LocalDate today = LocalDate.now(zone);
         boolean dateChanged = !today.equals(assignment.date());
@@ -49,14 +49,14 @@ public final class DailyRotationService {
                         return candidates.get(new SplittableRandom(seed).nextInt(candidates.size()));
                     });
             QuestModel.DailyScope scope = new QuestModel.DailyScope(today, difficulty, generation);
-            QuestModel.Key key = new QuestModel.Key(selected.id(), selected.behaviorHash(), scope);
+            QuestModel.Key key = new QuestModel.Key(selected.id(), scope);
             slots.put(difficulty, new QuestModel.Occurrence(key, selected, availableFrom, java.util.Optional.of(availableUntil)));
         }
 
         QuestModel.DailyAssignment next = new QuestModel.DailyAssignment(today, slots);
         boolean changed = !sameOccurrences(assignment, next);
         assignment = next;
-        return changed;
+        return new RefreshResult(changed, dateChanged);
     }
 
     public boolean reroll(QuestModel.Difficulty difficulty, QuestModel.Catalog catalog, QuestLedger ledger) {
@@ -64,7 +64,7 @@ public final class DailyRotationService {
             return false;
         }
         ledger.incrementRotationGeneration(difficulty);
-        return refresh(catalog, ledger);
+        return refresh(catalog, ledger).assignmentChanged();
     }
 
     /// Reuses a selection when it remains eligible for the same date and reroll generation.
@@ -109,4 +109,7 @@ public final class DailyRotationService {
         }
         return true;
     }
+
+    /// Separates any assignment update from the actual calendar-day transition.
+    public record RefreshResult(boolean assignmentChanged, boolean dateChanged) {}
 }

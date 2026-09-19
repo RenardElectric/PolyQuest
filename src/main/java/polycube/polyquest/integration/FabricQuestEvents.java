@@ -61,7 +61,6 @@ public final class FabricQuestEvents {
                 QuestRuntime.ifPresent(manager -> manager.onPlayerJoin(handler.getPlayer())));
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             breakTools.remove(handler.getPlayer().getUUID());
-            QuestRuntime.ifPresent(manager -> manager.onPlayerDisconnect(handler.getPlayer()));
         });
     }
 

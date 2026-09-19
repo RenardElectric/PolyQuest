@@ -5,7 +5,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.players.NameAndId;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.model.QuestModel;
@@ -125,10 +125,16 @@ public final class QuestCommandText {
 
     public static MutableComponent technicalDetails(QuestModel.Occurrence occurrence) {
         QuestModel.Definition quest = occurrence.definition();
-        return copy("[Technical details]", "Quest: " + quest.id()
-                + "\nOccurrence: " + occurrence.key().persistentKey()
-                + "\nBehavior hash: " + quest.behaviorHash()
-                + "\nPresentation hash: " + quest.presentationHash());
+        return copy("[Technical details]", "Quest: " + quest.id() + "\nOccurrence: " + occurrence.key().persistentKey());
+    }
+
+    public static MutableComponent dailyRotation() {
+        return Component.literal("[PolyQuest] ").withStyle(ChatFormatting.GOLD).append("New daily quests are available at the Quest Giver.");
+    }
+
+    public static MutableComponent progressReset() {
+        return Component.literal("[PolyQuest] ").withStyle(ChatFormatting.GOLD)
+                .append(Component.literal("Some quests were updated, so your progress was reset.").withStyle(ChatFormatting.GRAY));
     }
 
     public static MutableComponent diagnostics(Identifier id, NameAndId player) {

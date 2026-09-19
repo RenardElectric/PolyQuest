@@ -1,6 +1,7 @@
 package polycube.polyquest.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -12,12 +13,13 @@ import org.junit.jupiter.api.Test;
 final class QuestConfigTest {
     @Test
     void codecRoundTripsImmutableConfiguration() {
-        QuestConfig expected = new QuestConfig(42L, ZoneId.of("UTC"), false, 12);
+        QuestConfig expected = new QuestConfig(42L, ZoneId.of("UTC"), 12);
 
         var encoded = QuestConfig.CODEC.encodeStart(JsonOps.INSTANCE, expected).getOrThrow();
         var decoded = QuestConfig.CODEC.parse(JsonOps.INSTANCE, encoded).getOrThrow();
 
         assertEquals(expected, decoded);
+        assertFalse(encoded.getAsJsonObject().has("announceRotation"));
     }
 
     @Test
@@ -32,6 +34,6 @@ final class QuestConfigTest {
         assertTrue(invalidRetry.error().isPresent());
         assertTrue(invalidZone.error().isPresent());
         assertThrows(IllegalArgumentException.class,
-                () -> new QuestConfig(0L, ZoneId.of("UTC"), true, 0));
+                () -> new QuestConfig(0L, ZoneId.of("UTC"), 0));
     }
 }

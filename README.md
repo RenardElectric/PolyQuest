@@ -185,7 +185,6 @@ PolyQuest creates `config/polyquest.json` with these server-wide settings:
 |-----------------------------|----------------------|---------------------------------------------------------------------|
 | `dailySeed`                 | Built-in stable seed | Changes the deterministic daily selections.                         |
 | `timeZone`                  | Host system zone     | Sets the local midnight used for daily rotation.                    |
-| `announceRotation`          | `true`               | Broadcasts when new daily quests become available.                  |
 | `pendingRewardRetrySeconds` | `30`                 | Sets how often temporarily undeliverable rewards are retried.       |
 
 Use a Java/IANA time-zone ID such as `Europe/Zurich` for `timeZone`. Restart the server after editing
@@ -215,7 +214,10 @@ completion where applicable.
   persistent world data under PolyQuest's `ledger` entry.
 - Attempt progress is intentionally session-only and is lost when the server restarts.
 - Daily incomplete and ready-to-claim states are discarded when the configured date changes.
-- Quest reloads preserve compatible progress, while behavior-changing edits reset affected attempts.
+- Online players are notified when the daily rotation changes; players who were away receive the
+  same clickable notice when they next join that day.
+- Quest reloads preserve completed claims and pending rewards. Cosmetic edits keep live progress;
+  behavior-changing edits reset progressed attempts and notify affected players.
 - Back up the world and configuration as usual before removing the mod or moving a save between
   incompatible versions.
 

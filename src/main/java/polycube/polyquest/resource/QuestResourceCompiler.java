@@ -105,18 +105,7 @@ final class QuestResourceCompiler {
                 }
             });
 
-            JsonObject presentation = new JsonObject();
-            if (expanded.has("title")) {
-                presentation.add("title", expanded.get("title"));
-            }
-            if (expanded.has("description")) {
-                presentation.add("description", expanded.get("description"));
-            }
-            if (expanded.has("icon")) {
-                presentation.add("icon", expanded.get("icon"));
-            }
-
-            QuestModel.Definition definition = QuestModel.Definition.fromBody(id, body, hash(behavior), hash(presentation));
+            QuestModel.Definition definition = QuestModel.Definition.fromBody(id, body, hash(behavior));
             errors.addAll(validator.validate(definition, profiles));
             quests.put(id, definition);
         }

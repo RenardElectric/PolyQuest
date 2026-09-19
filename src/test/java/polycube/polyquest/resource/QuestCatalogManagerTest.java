@@ -65,18 +65,17 @@ final class QuestCatalogManagerTest {
     private static QuestModel.Definition definition(
             Identifier id,
             String behaviorHash,
-            String presentationHash) {
+            String title) {
         return new QuestModel.Definition(
                 id,
                 QuestModel.Availability.UNIQUE,
                 Optional.empty(),
-                "Test",
+                title,
                 List.of(),
                 Items.SUNFLOWER,
                 new BuiltInConditions.ExplicitSignal(id, 1),
                 new RewardApi.Plan(Optional.empty(), List.of()),
-                behaviorHash,
-                presentationHash);
+                behaviorHash);
     }
 
     private static Identifier id(String path) {

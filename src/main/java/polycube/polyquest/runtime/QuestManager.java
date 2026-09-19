@@ -1,11 +1,12 @@
 package polycube.polyquest.runtime;
 
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
+import org.jspecify.annotations.Nullable;
 import polycube.polyquest.claim.QuestClaimService;
+import polycube.polyquest.commands.QuestCommandText;
 import polycube.polyquest.config.QuestConfig;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.persistence.QuestLedger;
@@ -14,8 +15,7 @@ import polycube.polyquest.reward.RewardApi;
 import polycube.polyquest.rotation.DailyRotationService;
 import polycube.polyquest.signal.QuestSignal;
 
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 /// Server-scoped facade used by Fabric callbacks, commands, and future UI adapters.
 public final class QuestManager {
@@ -28,6 +28,7 @@ public final class QuestManager {
     private final QuestClaimService claims;
     private final QuestChangeNotifier questChanges = new QuestChangeNotifier();
     private final QuestCatalogManager.Subscription catalogSubscription;
+    private final Set<UUID> pendingResetNotifications = new HashSet<>();
     private long nextRewardRetryTick;
 
     public QuestManager(MinecraftServer server, QuestConfig config, QuestCatalogManager catalogs) {
@@ -39,7 +40,7 @@ public final class QuestManager {
         this.engine = new QuestEngine(server, catalogs, rotation, ledger);
         this.claims = new QuestClaimService(server, engine, ledger, catalogs, questChanges::changed);
         this.catalogSubscription = this.catalogs.addListener(this::onCatalogChanged);
-        refreshRotation(false);
+        refreshRotationAndEngine();
     }
 
     public MinecraftServer server() {
@@ -57,7 +58,7 @@ public final class QuestManager {
         long tick = server.getTickCount();
         boolean changed = false;
         if (tick % 20L == 0L) {
-            changed |= refreshRotation(false);
+            changed |= refreshRotationAndEngine();
         }
         changed |= engine.tick(tick);
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
@@ -77,13 +78,12 @@ public final class QuestManager {
     }
 
     public boolean reroll(List<QuestModel.Difficulty> difficulties) {
-        boolean changed = false;
+        boolean changed = refreshRotation().assignmentChanged();
         for (var difficulty : difficulties) {
             changed |= rotation.reroll(difficulty, catalogs.current(), ledger);
         }
         if (changed) {
             engine.rotationChanged();
-            announceRotation();
             questChanges.changed();
         }
         return changed;
@@ -91,17 +91,17 @@ public final class QuestManager {
 
     public void onPlayerJoin(ServerPlayer player) {
         claims.retryPending(player, false);
-    }
-
-    public void onPlayerDisconnect(ServerPlayer player) {
-        engine.playerDisconnected(player.getUUID());
+        notifyDailyRotation(player);
+        if (pendingResetNotifications.remove(player.getUUID())) {
+            sendResetNotification(player);
+        }
     }
 
     public void shutdown() {
         catalogSubscription.close();
         engine.close();
-        ledger.flush();
         questChanges.clear();
+        pendingResetNotifications.clear();
     }
 
     /// Returns the list of quests currently available to the given player.
@@ -142,35 +142,48 @@ public final class QuestManager {
     }
 
     private void onCatalogChanged(QuestCatalogManager.Update update) {
-        boolean rotationChanged = refreshRotation(true);
-        engine.onCatalogChanged(update);
-        QuestCatalogManager.Diff diff = update.diff();
-        boolean catalogChanged = !diff.added().isEmpty()
-                || !diff.removed().isEmpty()
-                || !diff.behaviorChanged().isEmpty()
-                || !diff.presentationChanged().isEmpty();
-        if (catalogChanged || rotationChanged) questChanges.changed();
+        DailyRotationService.RefreshResult rotationResult = refreshRotation();
+        for (var playerId : engine.onCatalogChanged(update)) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+            if (player == null) {
+                pendingResetNotifications.add(playerId);
+            } else {
+                sendResetNotification(player);
+            }
+        }
+        if (update.diff().hasChanges() || rotationResult.assignmentChanged()) questChanges.changed();
     }
 
     public boolean isClaimed(NameAndId player, QuestModel.Key key) {
         return ledger.isClaimed(player.id(), key);
     }
 
-    /// Synchronizes changed daily occurrences into the engine and handles their configured announcement.
-    private boolean refreshRotation(boolean catalogReload) {
-        boolean changed = rotation.refresh(catalogs.current(), ledger);
-        if (changed) {
-            engine.rotationChanged();
-            if (!catalogReload || config.announceRotation()) {
-                announceRotation();
-            }
+    /// Refreshes daily state and records exactly which players received the new-day notice.
+    private DailyRotationService.RefreshResult refreshRotation() {
+        DailyRotationService.RefreshResult result = rotation.refresh(catalogs.current(), ledger);
+        if (result.dateChanged()) {
+            server.getPlayerList().getPlayers().forEach(this::notifyDailyRotation);
         }
-        return changed;
+        return result;
     }
 
-    private void announceRotation() {
-        if (!config.announceRotation() || rotation.current().slots().isEmpty()) return;
-        server.getPlayerList().broadcastSystemMessage(Component.literal("New PolyQuest daily quests are available."), false);
+    private boolean refreshRotationAndEngine() {
+        var result = refreshRotation();
+        if (result.assignmentChanged()) {
+            engine.rotationChanged();
+            pendingResetNotifications.clear();
+        }
+        return result.assignmentChanged();
+    }
+
+    private void notifyDailyRotation(ServerPlayer player) {
+        if (!rotation.current().slots().isEmpty() && ledger.markRotationNotified(player.getUUID())) {
+            player.sendSystemMessage(QuestCommandText.dailyRotation());
+        }
+    }
+
+    private static void sendResetNotification(ServerPlayer player) {
+        player.sendSystemMessage(QuestCommandText.progressReset());
     }
 
     @FunctionalInterface

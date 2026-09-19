@@ -23,7 +23,7 @@ import java.util.function.Function;
 /// Durable world-owned claim and reward state stored through Minecraft's SavedData system.
 ///
 /// Attempt progress is intentionally absent. Only successful occurrence claims,
-/// pending reward transactions, and manual reroll generations survive a restart.
+/// pending rewards, rotation metadata, and notification receipts survive a restart.
 public final class QuestLedger extends SavedData {
     private static final Codec<LocalDate> DATE_CODEC = Codec.STRING.comapFlatMap(
             value -> {
@@ -42,11 +42,13 @@ public final class QuestLedger extends SavedData {
     private static final Codec<Set<String>> CLAIM_SET_CODEC = Codec.STRING.listOf().xmap(HashSet::new, values -> values.stream().sorted().toList());
     private static final Codec<Map<UUID, Set<String>>> CLAIMS_CODEC = Codec.unboundedMap(UUIDUtil.STRING_CODEC, CLAIM_SET_CODEC);
     private static final Codec<Map<QuestModel.Difficulty, Integer>> ROTATION_GENERATIONS_CODEC = Codec.unboundedMap(QuestModel.Difficulty.CODEC, NON_NEGATIVE_INT);
+    private static final Codec<Set<UUID>> UUID_SET_CODEC = UUIDUtil.STRING_CODEC.listOf().xmap(HashSet::new, values -> values.stream().sorted().toList());
     private static final Codec<List<RewardApi.Definition>> REWARDS_CODEC = RewardApi.codec().listOf();
 
     static final Codec<QuestLedger> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             DATE_CODEC.optionalFieldOf("rotation_date", LocalDate.MIN).forGetter(ledger -> ledger.rotationDate),
             ROTATION_GENERATIONS_CODEC.optionalFieldOf("rotation_generations", Map.of()).forGetter(ledger -> ledger.rotationGenerations),
+            UUID_SET_CODEC.optionalFieldOf("rotation_notified_players", Set.of()).forGetter(ledger -> ledger.rotationNotifiedPlayers),
             CLAIMS_CODEC.optionalFieldOf("claims", Map.of()).forGetter(ledger -> ledger.claims),
             PendingTransaction.CODEC.listOf().optionalFieldOf("pending", List.of()).forGetter(ledger -> List.copyOf(ledger.pending.values()))
     ).apply(instance, QuestLedger::new));
@@ -60,8 +62,8 @@ public final class QuestLedger extends SavedData {
     private final Map<UUID, Set<String>> claims = new HashMap<>();
     private final Map<UUID, PendingTransaction> pending = new LinkedHashMap<>();
     private final EnumMap<QuestModel.Difficulty, Integer> rotationGenerations = new EnumMap<>(QuestModel.Difficulty.class);
+    private final Set<UUID> rotationNotifiedPlayers = new HashSet<>();
     private LocalDate rotationDate = LocalDate.MIN;
-    private Optional<SavedDataStorage> storage = Optional.empty();
 
     QuestLedger() {
         for (QuestModel.Difficulty difficulty : QuestModel.Difficulty.values()) {
@@ -71,20 +73,20 @@ public final class QuestLedger extends SavedData {
 
     private QuestLedger(
             LocalDate rotationDate, Map<QuestModel.Difficulty, Integer> rotationGenerations,
-            Map<UUID, Set<String>> claims, List<PendingTransaction> pendingTransactions
+            Set<UUID> rotationNotifiedPlayers, Map<UUID, Set<String>> claims,
+            List<PendingTransaction> pendingTransactions
     ) {
         this();
         this.rotationDate = rotationDate;
         this.rotationGenerations.putAll(rotationGenerations);
+        this.rotationNotifiedPlayers.addAll(rotationNotifiedPlayers);
         claims.forEach((playerId, values) -> this.claims.put(playerId, new HashSet<>(values)));
         pendingTransactions.forEach(transaction -> pending.put(transaction.id(), transaction));
     }
 
     public static QuestLedger load(MinecraftServer server) {
         SavedDataStorage storage = server.getDataStorage();
-        QuestLedger ledger = storage.computeIfAbsent(TYPE);
-        ledger.storage = Optional.of(storage);
-        return ledger;
+        return storage.computeIfAbsent(TYPE);
     }
 
     public boolean isClaimed(UUID playerId, QuestModel.Key occurrence) {
@@ -98,43 +100,43 @@ public final class QuestLedger extends SavedData {
                 0, TransactionState.PREPARED, ""
         );
         pending.put(transaction.id(), transaction);
-        persistImmediately();
+        setDirty();
         return transaction;
     }
 
     public void markCostsCommitted(PendingTransaction transaction) {
         transaction.state = TransactionState.COSTS_COMMITTED;
-        persistImmediately();
+        setDirty();
     }
 
     public void advanceReward(PendingTransaction transaction) {
         transaction.nextReward++;
         transaction.state = TransactionState.REWARD_PENDING;
         transaction.lastError = "";
-        persistImmediately();
+        setDirty();
     }
 
     public void markRetryable(PendingTransaction transaction, String message) {
         transaction.state = TransactionState.REWARD_PENDING;
         transaction.lastError = message;
-        persistImmediately();
+        setDirty();
     }
 
     public void markFailed(PendingTransaction transaction, String message) {
         transaction.state = TransactionState.FAILED;
         transaction.lastError = message;
-        persistImmediately();
+        setDirty();
     }
 
     public void cancel(PendingTransaction transaction) {
         pending.remove(transaction.id());
-        persistImmediately();
+        setDirty();
     }
 
     public void complete(PendingTransaction transaction) {
         claims.computeIfAbsent(transaction.playerId(), ignored -> new HashSet<>()).add(transaction.occurrenceKey());
         pending.remove(transaction.id());
-        persistImmediately();
+        setDirty();
     }
 
     public List<PendingTransaction> pendingFor(UUID playerId) {
@@ -160,7 +162,7 @@ public final class QuestLedger extends SavedData {
             if (playerClaims.isEmpty()) {
                 claims.remove(playerId);
             }
-            persistImmediately();
+            setDirty();
             return true;
         }
         return false;
@@ -172,7 +174,17 @@ public final class QuestLedger extends SavedData {
         }
         rotationDate = date;
         rotationGenerations.replaceAll((_, _) -> 0);
-        persistImmediately();
+        rotationNotifiedPlayers.clear();
+        setDirty();
+    }
+
+    /// Records delivery once per player for the current rotation, including across restarts.
+    public boolean markRotationNotified(UUID playerId) {
+        if (!rotationNotifiedPlayers.add(playerId)) {
+            return false;
+        }
+        setDirty();
+        return true;
     }
 
     public int rotationGeneration(QuestModel.Difficulty difficulty) {
@@ -181,18 +193,7 @@ public final class QuestLedger extends SavedData {
 
     public void incrementRotationGeneration(QuestModel.Difficulty difficulty) {
         rotationGenerations.merge(difficulty, 1, Integer::sum);
-        persistImmediately();
-    }
-
-    public void flush() {
         setDirty();
-        storage.ifPresent(SavedDataStorage::saveAndJoin);
-    }
-
-    /// Marks the ledger dirty and synchronously checkpoints it when attached to world storage.
-    private void persistImmediately() {
-        setDirty();
-        storage.ifPresent(SavedDataStorage::saveAndJoin);
     }
 
     public enum TransactionState implements StringRepresentable {

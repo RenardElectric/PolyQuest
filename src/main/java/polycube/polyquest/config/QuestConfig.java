@@ -20,14 +20,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.DateTimeException;
 import java.time.ZoneId;
-import java.util.Objects;
 import java.util.function.Function;
 
 /// Immutable server-wide settings decoded through Mojang's codec infrastructure.
-public record QuestConfig(
-        long dailySeed, ZoneId timeZone,
-        boolean announceRotation, int pendingRewardRetrySeconds
-) {
+public record QuestConfig(long dailySeed, ZoneId timeZone, int pendingRewardRetrySeconds) {
     public QuestConfig {
         if (pendingRewardRetrySeconds < 1) {
             throw new IllegalArgumentException("pendingRewardRetrySeconds must be positive");
@@ -56,15 +52,11 @@ public record QuestConfig(
     public static final Codec<QuestConfig> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Codec.LONG.fieldOf("dailySeed").forGetter(QuestConfig::dailySeed),
             ZONE_ID_CODEC.fieldOf("timeZone").forGetter(QuestConfig::timeZone),
-            Codec.BOOL.fieldOf("announceRotation").forGetter(QuestConfig::announceRotation),
             RETRY_SECONDS_CODEC.fieldOf("pendingRewardRetrySeconds").forGetter(QuestConfig::pendingRewardRetrySeconds)
     ).apply(instance, QuestConfig::new));
 
     public static QuestConfig defaults() {
-        return new QuestConfig(
-                DEFAULT_DAILY_SEED, ZoneId.systemDefault(),
-                true, DEFAULT_RETRY_SECONDS
-        );
+        return new QuestConfig(DEFAULT_DAILY_SEED, ZoneId.systemDefault(), DEFAULT_RETRY_SECONDS);
     }
 
     public static QuestConfig load(Path path) {

@@ -12,6 +12,7 @@ public final class QuestAttempt {
     private QuestModel.AttemptStatus status = QuestModel.AttemptStatus.ACTIVE;
     private final long createdAtTick;
     private long lastUpdatedTick;
+    private boolean progressed;
 
     public QuestAttempt(QuestModel.Occurrence occurrence, MinecraftServer server) {
         this.occurrence = occurrence;
@@ -29,8 +30,8 @@ public final class QuestAttempt {
         return status;
     }
 
-    /// Rebinds display-only data without replacing the condition tree, progress, or occurrence identity.
-    public void updatePresentation(QuestModel.Occurrence currentOccurrence) {
+    /// Rebinds current definition and timing data without replacing progress or durable identity.
+    public void updateOccurrence(QuestModel.Occurrence currentOccurrence) {
         if (!occurrence.key().equals(currentOccurrence.key())) {
             throw new IllegalArgumentException("Cannot replace an attempt with another occurrence");
         }
@@ -44,6 +45,7 @@ public final class QuestAttempt {
         ConditionRuntime.Update update = root.onSignal(signal, new ConditionRuntime.EvaluationContext(server, signal.serverTick()));
         if (update.changed()) {
             lastUpdatedTick = signal.serverTick();
+            progressed = true;
         }
         refreshStatus();
         return update;
@@ -56,6 +58,7 @@ public final class QuestAttempt {
         ConditionRuntime.Update update = root.tick(new ConditionRuntime.EvaluationContext(server, serverTick));
         if (update.changed()) {
             lastUpdatedTick = serverTick;
+            progressed = true;
         }
         refreshStatus();
         return update;
@@ -99,6 +102,11 @@ public final class QuestAttempt {
         result.addProperty("last_updated_tick", lastUpdatedTick);
         result.add("condition", root.diagnostic());
         return result;
+    }
+
+    /// Distinguishes real progress from attempts created only to render quest state.
+    public boolean hasProgress() {
+        return progressed || status != QuestModel.AttemptStatus.ACTIVE;
     }
 
     private boolean terminal() {

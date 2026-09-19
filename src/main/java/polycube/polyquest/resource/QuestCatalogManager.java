@@ -22,10 +22,10 @@ public final class QuestCatalogManager {
 
     /// Must be called on the server thread from the reload listener's apply phase.
     public void apply(QuestModel.Catalog candidate) {
-        QuestModel.Catalog previous = current;
-        Diff diff = Diff.between(previous, candidate);
+        var previous = current;
+        var diff = Diff.between(previous, candidate);
         current = candidate;
-        Update update = new Update(previous, candidate, diff);
+        var update = new Update(previous, candidate, diff);
         List.copyOf(listeners).forEach(listener -> listener.accept(update));
     }
 
@@ -49,6 +49,13 @@ public final class QuestCatalogManager {
             unchanged = Set.copyOf(unchanged);
         }
 
+        public boolean hasChanges() {
+            return !added.isEmpty()
+                    || !removed.isEmpty()
+                    || !behaviorChanged.isEmpty()
+                    || !presentationChanged.isEmpty();
+        }
+
         public static Diff between(QuestModel.Catalog oldCatalog, QuestModel.Catalog newCatalog) {
             Set<Identifier> oldIds = oldCatalog.quests().keySet();
             Set<Identifier> newIds = newCatalog.quests().keySet();
@@ -65,13 +72,22 @@ public final class QuestCatalogManager {
                 QuestModel.Definition newQuest = Objects.requireNonNull(newCatalog.quests().get(id));
                 if (!oldQuest.behaviorHash().equals(newQuest.behaviorHash())) {
                     behaviorChanged.add(id);
-                } else if (!oldQuest.presentationHash().equals(newQuest.presentationHash())) {
+                } else if (!samePresentation(oldQuest, newQuest)) {
                     presentationChanged.add(id);
                 } else {
                     unchanged.add(id);
                 }
             });
             return new Diff(added, removed, behaviorChanged, presentationChanged, unchanged);
+        }
+
+        private static boolean samePresentation(
+                QuestModel.Definition first,
+                QuestModel.Definition second
+        ) {
+            return first.title().equals(second.title())
+                    && first.description().equals(second.description())
+                    && first.icon().equals(second.icon());
         }
     }
 }

@@ -59,7 +59,7 @@ public final class QuestModel {
         }
     }
 
-    /// Decoded quest data before the resource path supplies its identifier and hashes.
+    /// Decoded quest data before the resource path supplies its identifier and functional fingerprint.
     public record Body(
             Availability availability, Optional<Difficulty> difficulty, String title,
             List<String> description, Holder<Item> icon, ConditionApi.Definition condition, RewardApi.Plan rewards
@@ -82,28 +82,27 @@ public final class QuestModel {
     public record Definition(
             Identifier id, Availability availability, Optional<Difficulty> difficulty,
             String title, List<String> description, Item icon, ConditionApi.Definition condition,
-            RewardApi.Plan rewards, String behaviorHash, String presentationHash
+            RewardApi.Plan rewards, String behaviorHash
     ) {
         public Definition {
             description = List.copyOf(description);
         }
 
-        public static Definition fromBody(Identifier id, Body body, String behaviorHash, String presentationHash) {
+        public static Definition fromBody(Identifier id, Body body, String behaviorHash) {
             return new Definition(
                     id, body.availability(), body.difficulty(),
                     body.title(), body.description(), body.icon().value(), body.condition(),
-                    body.rewards(), behaviorHash, presentationHash
+                    body.rewards(), behaviorHash
             );
         }
     }
 
-    /// One appearance of a definition. Daily occurrences are scoped to a date and slot;
-    /// unique occurrences are scoped only to their current behavior revision.
+    /// One appearance of a definition. Its durable identity is independent of definition edits.
     public record Occurrence(Key key, Definition definition, Instant availableFrom, Optional<Instant> availableUntil) {}
 
-    public record Key(Identifier questId, String behaviorHash, Scope scope) {
+    public record Key(Identifier questId, Scope scope) {
         public String persistentKey() {
-            return questId + "|" + behaviorHash + "|" + scope.serialized();
+            return questId + "|" + scope.serialized();
         }
     }
 

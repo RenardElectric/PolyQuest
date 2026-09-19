@@ -88,10 +88,12 @@ public final class QuestEngine implements AutoCloseable {
     /// Rebuilds availability and discards daily attempts whose occurrence is no longer active.
     void rotationChanged() {
         rebuildAvailableOccurrences();
-        java.util.Set<String> activeKeys = rotation.current().slots().values().stream()
-                .map(occurrence -> occurrence.key().persistentKey())
+        Set<QuestModel.Key> activeKeys = rotation.current().slots().values().stream()
+                .map(QuestModel.Occurrence::key)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        sessions.values().forEach(session -> session.removeDailyExcept(activeKeys));
+        sessions.values().forEach(session -> session.removeIf(attempt ->
+                attempt.occurrence().key().scope() instanceof QuestModel.DailyScope
+                        && !activeKeys.contains(attempt.occurrence().key())));
     }
 
     boolean reset(UUID playerId, QuestModel.Occurrence occurrence) {
@@ -101,30 +103,50 @@ public final class QuestEngine implements AutoCloseable {
         return ledger.resetClaim(playerId, occurrence.key()) || attemptRemoved;
     }
 
-    public void playerDisconnected(UUID playerId) {
-        // Deliberately retained until shutdown: timed quests continue while the server runs.
-    }
-
-    /// Invalidates behavior changes while preserving attempts for presentation-only updates.
-    void onCatalogChanged(QuestCatalogManager.Update update) {
+    /// Reconciles live attempts with a reloaded catalog and reports players whose progress was reset due to a behavior change.
+    List<UUID> onCatalogChanged(QuestCatalogManager.Update update) {
         rebuildAvailableOccurrences();
-        for (Identifier id : update.diff().removed()) {
-            sessions.values().forEach(session -> session.removeQuest(id));
+        Map<QuestModel.Key, QuestModel.Occurrence> currentOccurrences = new LinkedHashMap<>();
+        for (QuestModel.Occurrence occurrence : availableOccurrences) {
+            currentOccurrences.put(occurrence.key(), occurrence);
         }
-        for (Identifier id : update.diff().behaviorChanged()) {
-            sessions.values().forEach(session -> session.removeQuest(id));
+        Set<QuestModel.Key> currentKeys = currentOccurrences.keySet();
+        Set<Identifier> behaviorChanged = update.diff().behaviorChanged();
+        List<UUID> resets = new ArrayList<>();
+
+        for (Map.Entry<UUID, PlayerQuestSession> entry : sessions.entrySet()) {
+            UUID playerId = entry.getKey();
+            List<QuestAttempt> removed = entry.getValue().removeIf(attempt -> {
+                QuestModel.Key key = attempt.occurrence().key();
+                boolean available = currentKeys.contains(key);
+                boolean changed = behaviorChanged.contains(key.questId());
+                return !available || changed && !durablyCompleted(playerId, key);
+            });
+            for (QuestAttempt attempt : removed) {
+                Identifier questId = attempt.occurrence().definition().id();
+                if (behaviorChanged.contains(questId)
+                        && !durablyCompleted(playerId, attempt.occurrence().key())
+                        && attempt.hasProgress()) {
+                    resets.add(playerId);
+                }
+            }
+            entry.getValue().updateOccurrences(currentOccurrences);
         }
-        sessions.values().forEach(session -> session.updatePresentation(update.current().quests()));
+        return List.copyOf(resets);
     }
 
     /// Combines the current daily slots with one occurrence for every unique quest definition.
     private void rebuildAvailableOccurrences() {
         List<QuestModel.Occurrence> occurrences = new ArrayList<>(rotation.current().slots().values());
         for (QuestModel.Definition definition : catalogs.current().unique()) {
-            QuestModel.Key key = new QuestModel.Key(definition.id(), definition.behaviorHash(), new QuestModel.UniqueScope());
+            QuestModel.Key key = new QuestModel.Key(definition.id(), new QuestModel.UniqueScope());
             occurrences.add(new QuestModel.Occurrence(key, definition, Instant.EPOCH, Optional.empty()));
         }
         availableOccurrences = List.copyOf(occurrences);
+    }
+
+    private boolean durablyCompleted(UUID playerId, QuestModel.Key key) {
+        return ledger.isClaimed(playerId, key) || ledger.hasPending(playerId, key);
     }
 
     @Override

@@ -14,9 +14,9 @@ import java.util.Comparator;
 
 public final class UniqueQuestGui  extends QuestGui {
     private static final Component TITLE = TextComponents.styled("Unique Quests", ChatFormatting.LIGHT_PURPLE, true).withStyle(s -> s.withShadowColor(0xFF000000));
-    private static final int MENU_SIZE = 9 * 2;
-    private static final int BACKGROUND_START_SLOT = 9;
-    private static final int BACK_SLOT = 9;
+    private static final int MENU_SIZE = 9 * 6;
+    private static final int BACKGROUND_START_SLOT = MENU_SIZE - 9;
+    private static final int BACK_SLOT = MENU_SIZE - 9;
     private static final Comparator<QuestModel.Occurrence> DAILY_QUEST_ORDER = Comparator
             .comparingInt((QuestModel.Occurrence quest) -> quest.definition().difficulty()
                     .map(Enum::ordinal)
@@ -24,7 +24,7 @@ public final class UniqueQuestGui  extends QuestGui {
             .thenComparing(quest -> quest.definition().id().toString());
 
     private UniqueQuestGui(ServerPlayer player) {
-        super(MenuType.GENERIC_9x2, player, TITLE);
+        super(MenuType.GENERIC_9x6, player, TITLE);
     }
 
     public static void open(ServerPlayer player) {

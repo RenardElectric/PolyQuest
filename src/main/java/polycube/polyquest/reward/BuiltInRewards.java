@@ -122,7 +122,7 @@ public final class BuiltInRewards {
             return RewardApi.GrantResult.retryLater("Player has no default account for currency " + currency.id());
         }
 
-        var result = account.decreaseBalance(reward.amount());
+        var result = account.increaseBalance(reward.amount());
         if (result.isFailure()) {
             return RewardApi.GrantResult.retryLater("Failed to grant money: " + result.message());
         }

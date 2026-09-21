@@ -46,9 +46,9 @@ public final class QuestDisplay {
 
     private Presentation format(MinecraftServer server, NameAndId player, QuestModel.Occurrence occurrence) {
         var definition = occurrence.definition();
-        var claimed = manager.isClaimed(player, occurrence.key());
         var attempt = manager.attempt(player, occurrence);
-        var status = claimed ? QuestModel.AttemptStatus.CLAIMED : attempt.status();
+        var status = attempt.status();
+        var claimed = status == QuestModel.AttemptStatus.CLAIMED;
         var unavailable = !claimed && occurrence.availableUntil()
                 .map(deadline -> !deadline.isAfter(Instant.now()))
                 .orElse(false);

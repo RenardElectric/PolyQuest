@@ -156,6 +156,37 @@ final class BuiltInConditionRuntime {
         }
     }
 
+    /// Counts supported loot events rather than item quantity; one source event advances at most once.
+    static final class LootItemInstance extends CounterInstance<BuiltInConditions.LootItem> {
+        LootItemInstance(BuiltInConditions.LootItem definition, ConditionRuntime.CreationContext context) {
+            super(definition, context, definition.count());
+        }
+
+        @Override
+        public ConditionRuntime.Update onSignal(QuestSignal signal, ConditionRuntime.EvaluationContext context) {
+            if (!(signal instanceof QuestSignal.LootGenerated loot) || !matchesSource(loot)) {
+                return ConditionRuntime.Update.NONE;
+            }
+            return loot.items().stream().anyMatch(definition.item())
+                    ? increment(1)
+                    : ConditionRuntime.Update.NONE;
+        }
+
+        private boolean matchesSource(QuestSignal.LootGenerated loot) {
+            return definition.entity().map(predicate ->
+                    loot.origin() == QuestSignal.LootOrigin.ENTITY
+                            && predicate.matches(loot.player(), loot.sourceEntity()))
+                    .orElse(true);
+        }
+
+        @Override
+        public JsonObject diagnostic() {
+            JsonObject result = super.diagnostic();
+            result.addProperty("source", definition.entity().isPresent() ? "entity" : "any");
+            return result;
+        }
+    }
+
     /// A condition that completes when the player obtains a specific advancement.
     static final class ObtainAdvancementInstance extends BaseInstance<BuiltInConditions.ObtainAdvancement> {
         ObtainAdvancementInstance(BuiltInConditions.ObtainAdvancement definition, ConditionRuntime.CreationContext context) {

@@ -331,11 +331,18 @@ public final class QuestDisplay {
         return switch (condition) {
             case BuiltInConditions.AdvancementCriterion value -> "Satisfy " + humanize(Optional.ofNullable(BuiltInRegistries.TRIGGER_TYPES.getKey(value.criterion().trigger())).orElse(PolyQuest.id("not_found"))) + " criterion";
             case BuiltInConditions.ConsumeItems value -> "Turn in " + value.count() + "× " + itemTarget(value.item());
+            case BuiltInConditions.LootItem value -> lootItemSummary(value);
             case BuiltInConditions.ObtainAdvancement value -> "Complete " + humanize(value.advancement()) + " advancement";
             case BuiltInConditions.ExplicitSignal value when value.count() > 1 -> "Trigger " + humanize(value.signal()) + " " + value.count() + " times";
             case BuiltInConditions.ExplicitSignal value -> "Trigger " + humanize(value.signal());
             default -> humanize(condition.type().id());
         };
+    }
+
+    private static String lootItemSummary(BuiltInConditions.LootItem condition) {
+        String source = condition.entity().isPresent() ? " from a matching entity" : " from loot";
+        String repetitions = condition.count() > 1 ? " " + condition.count() + " times" : "";
+        return "Loot " + itemTarget(condition.item()) + source + repetitions;
     }
 
     private static Optional<Progress> progress(ConditionApi.Definition condition, JsonObject diagnostic, ConditionStatus status) {

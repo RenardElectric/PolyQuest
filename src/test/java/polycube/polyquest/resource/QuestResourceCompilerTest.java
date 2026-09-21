@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.Objects;
 import net.minecraft.SharedConstants;
 import net.minecraft.advancements.triggers.CriteriaTriggers;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.BeforeAll;
@@ -29,6 +31,7 @@ final class QuestResourceCompilerTest {
         Bootstrap.bootStrap();
         ConditionApi.register(BuiltInConditions.AdvancementCriterion.TYPE);
         ConditionApi.register(BuiltInConditions.ExplicitSignal.TYPE);
+        ConditionApi.register(BuiltInConditions.LootItem.TYPE);
         RewardApi.register(BuiltInRewards.Experience.TYPE);
     }
 
@@ -187,5 +190,47 @@ final class QuestResourceCompilerTest {
                 BuiltInConditions.AdvancementCriterion.class,
                 Objects.requireNonNull(catalog.quests().get(questId)).condition());
         assertSame(CriteriaTriggers.TICK, condition.criterion().trigger());
+    }
+
+    @Test
+    void compilesLootItemWithAnEntityPredicateAndDefaultCount() {
+        Identifier questId = Identifier.fromNamespaceAndPath("test", "entity_loot");
+        QuestResourceCompiler.ResourceSet resources = new QuestResourceCompiler.ResourceSet(
+                Map.of(questId, JsonParser.parseString("""
+                        {
+                          "availability": "unique",
+                          "title": "Entity loot test",
+                          "icon": "minecraft:iron_ingot",
+                          "condition": {
+                            "type": "polyquest:loot_item",
+                            "item": {
+                              "items": "minecraft:iron_ingot"
+                            },
+                            "entity": {
+                              "minecraft:entity_type": "minecraft:zombie"
+                            }
+                          },
+                          "rewards": {
+                            "rewards": [
+                              { "type": "polyquest:experience", "points": 1 }
+                            ]
+                          }
+                        }
+                        """)),
+                Map.of(),
+                Map.of());
+
+        QuestModel.Catalog catalog = new QuestResourceCompiler()
+                .compile(
+                        resources,
+                        RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY)
+                                .createSerializationContext(JsonOps.INSTANCE))
+                .getOrThrow();
+
+        BuiltInConditions.LootItem condition = assertInstanceOf(
+                BuiltInConditions.LootItem.class,
+                Objects.requireNonNull(catalog.quests().get(questId)).condition());
+        assertTrue(condition.entity().isPresent());
+        assertEquals(1, condition.count());
     }
 }

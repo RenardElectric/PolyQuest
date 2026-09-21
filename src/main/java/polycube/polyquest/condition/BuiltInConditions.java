@@ -3,10 +3,7 @@ package polycube.polyquest.condition;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.advancements.predicates.BlockPredicate;
-import net.minecraft.advancements.predicates.DamageSourcePredicate;
 import net.minecraft.advancements.predicates.ItemPredicate;
-import net.minecraft.advancements.predicates.LocationPredicate;
 import net.minecraft.advancements.predicates.entity.EntityPredicate;
 import net.minecraft.advancements.triggers.Criterion;
 import net.minecraft.resources.Identifier;
@@ -52,6 +49,23 @@ public final class BuiltInConditions {
         }
     }
 
+    /// Counts loot-generation events containing a matching item, optionally restricted to a matching slain entity.
+    public record LootItem(ItemPredicate item, Optional<EntityPredicate> entity, int count) implements ConditionApi.Definition {
+        public static final MapCodec<LootItem> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+                ItemPredicate.CODEC.fieldOf("item").forGetter(LootItem::item),
+                EntityPredicate.CODEC.optionalFieldOf("entity").forGetter(LootItem::entity),
+                Codec.INT.optionalFieldOf("count", 1).forGetter(LootItem::count)
+        ).apply(instance, LootItem::new));
+        public static final ConditionApi.Type<LootItem> TYPE = new ConditionApi.Type<>(
+                PolyQuest.id("loot_item"), CODEC,
+                BuiltInConditionRuntime.LootItemInstance::new, constant(SIGNAL_DRIVEN));
+
+        @Override
+        public ConditionApi.Type<LootItem> type() {
+            return TYPE;
+        }
+    }
+
     /// Triggers when the player obtains a specified advancement.
     public record ObtainAdvancement(Identifier advancement) implements ConditionApi.Definition {
         public static final MapCodec<ObtainAdvancement> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -86,6 +100,7 @@ public final class BuiltInConditions {
     public static void register() {
         ConditionApi.register(AdvancementCriterion.TYPE);
         ConditionApi.register(ConsumeItems.TYPE);
+        ConditionApi.register(LootItem.TYPE);
         ConditionApi.register(ObtainAdvancement.TYPE);
         ConditionApi.register(ExplicitSignal.TYPE);
     }

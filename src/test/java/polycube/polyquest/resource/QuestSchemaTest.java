@@ -151,6 +151,19 @@ final class QuestSchemaTest {
         assertTrue(criterionProperties.getAsJsonObject("conditions")
                 .get("additionalProperties").getAsBoolean());
 
+        JsonObject lootItem = definitions.getAsJsonObject("lootItemCondition");
+        assertObjectFields(
+                lootItem,
+                Set.of("type", "item", "entity", "count"),
+                Set.of("type", "item")
+        );
+        JsonObject lootProperties = lootItem.getAsJsonObject("properties");
+        assertEquals("#/$defs/itemPredicate", lootProperties
+                .getAsJsonObject("item").get("$ref").getAsString());
+        assertEquals("#/$defs/entityPredicate", lootProperties
+                .getAsJsonObject("entity").get("$ref").getAsString());
+        assertEquals(1, lootProperties.getAsJsonObject("count").get("default").getAsInt());
+
         Set<String> conditionReferences = new HashSet<>();
         for (JsonElement element : definitions.getAsJsonObject("condition").getAsJsonArray("oneOf")) {
             conditionReferences.add(element.getAsJsonObject().get("$ref").getAsString());
@@ -158,6 +171,7 @@ final class QuestSchemaTest {
         assertEquals(Set.of(
                 "#/$defs/advancementCriterionCondition",
                 "#/$defs/consumeItemsCondition",
+                "#/$defs/lootItemCondition",
                 "#/$defs/obtainAdvancementCondition",
                 "#/$defs/explicitSignalCondition",
                 "#/$defs/allOfCondition",

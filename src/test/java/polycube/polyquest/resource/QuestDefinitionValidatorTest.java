@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import net.minecraft.SharedConstants;
+import net.minecraft.advancements.predicates.ItemPredicate;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.item.Items;
@@ -61,6 +62,25 @@ final class QuestDefinitionValidatorTest {
 
         assertTrue(errors.stream().anyMatch(message ->
                 message.contains("start_condition must be completable from quest signals")));
+    }
+
+    @Test
+    void rejectsNonPositiveLootEventCount() {
+        Identifier id = Identifier.fromNamespaceAndPath("polyquest_test", "loot");
+        var quest = new QuestModel.Definition(
+                id,
+                QuestModel.Availability.UNIQUE,
+                Optional.empty(),
+                "Loot",
+                List.of(),
+                Items.IRON_INGOT,
+                new BuiltInConditions.LootItem(ItemPredicate.Builder.item().build(), Optional.empty(), 0),
+                new RewardApi.Plan(Optional.empty(), List.of()),
+                "behavior");
+
+        List<String> errors = new QuestDefinitionValidator().validate(quest, Map.of());
+
+        assertTrue(errors.stream().anyMatch(message -> message.contains("condition: count must be positive")));
     }
 
     private record ClaimOnly() implements ConditionApi.Definition {

@@ -65,6 +65,13 @@
       },
       "additionalProperties": false
     },
+    "entityPredicate": {
+      "title": "Minecraft entity predicate",
+      "description": "Decoded directly by Mojang's EntityPredicate codec. Keys are registered entity-sub-predicate identifiers.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": true
+    },
     "itemStackTemplate": {
       "title": "Minecraft item stack template",
       "description": "Decoded directly by Mojang's ItemStackTemplate codec. A bare item identifier is shorthand for a count of one.",
@@ -197,6 +204,19 @@
         "type": { "const": "polyquest:consume_items" },
         "item": { "$ref": "#/$defs/itemPredicate" },
         "count": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "lootItemCondition": {
+      "title": "Loot a matching item",
+      "description": "Counts supported loot-generation events containing a matching item. With entity present, only death loot from a matching entity counts; without it, entity death, fishing and player-broken block loot count.",
+      "type": "object",
+      "required": ["type", "item"],
+      "properties": {
+        "type": { "const": "polyquest:loot_item" },
+        "item": { "$ref": "#/$defs/itemPredicate" },
+        "entity": { "$ref": "#/$defs/entityPredicate" },
+        "count": { "type": "integer", "minimum": 1, "default": 1 }
       },
       "additionalProperties": false
     },
@@ -344,6 +364,7 @@
       "oneOf": [
         { "$ref": "#/$defs/advancementCriterionCondition" },
         { "$ref": "#/$defs/consumeItemsCondition" },
+        { "$ref": "#/$defs/lootItemCondition" },
         { "$ref": "#/$defs/obtainAdvancementCondition" },
         { "$ref": "#/$defs/explicitSignalCondition" },
         { "$ref": "#/$defs/allOfCondition" },

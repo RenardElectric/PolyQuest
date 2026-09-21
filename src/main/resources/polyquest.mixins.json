@@ -3,7 +3,10 @@
   "package": "polycube.polyquest.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
+    "BlockLootMixin",
+    "EntityItemDropMixin",
     "FishingRodHookedTriggerMixin",
+    "LivingEntityLootMixin",
     "PlayerAdvancementsMixin",
     "SimpleCriterionTriggerMixin"
   ],

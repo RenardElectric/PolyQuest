@@ -9,6 +9,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.NameAndId;
+import polycube.polyquest.PolyQuest;
 import polycube.polyquest.commands.QuestCommandText;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.condition.CompositeConditions;
@@ -328,27 +329,11 @@ public final class QuestDisplay {
         var ops = manager.server().registryAccess().createSerializationContext(JsonOps.INSTANCE);
 
         return switch (condition) {
-            case BuiltInConditions.AdvancementCriterion value -> "Satisfy " + humanize(BuiltInRegistries.TRIGGER_TYPES.getKey(value.criterion().trigger())) + " criterion";
+            case BuiltInConditions.AdvancementCriterion value -> "Satisfy " + humanize(Optional.ofNullable(BuiltInRegistries.TRIGGER_TYPES.getKey(value.criterion().trigger())).orElse(PolyQuest.id("not_found"))) + " criterion";
             case BuiltInConditions.ConsumeItems value -> "Turn in " + value.count() + "× " + itemTarget(value.item());
-            case BuiltInConditions.FishItem value -> "Catch " + value.count() + "× " + itemTarget(value.item());
-            case BuiltInConditions.KillEntity value ->
-                    "Defeat " + value.count() + "× " + entityTarget(ops, value.victim())
-                            + value.damageSource().map(source -> " using " + damageTarget(ops, source)).orElse("");
-            case BuiltInConditions.BreakBlock value ->
-                    "Break " + value.count() + "× " + blockTarget(value.block())
-                            + value.tool().map(tool -> " with " + itemTarget(tool)).orElse("");
-            case BuiltInConditions.VisitLocation value when value.continuousTicks() > 1 -> "Stay at " + locationTarget(value.location()) + " for " + duration(value.continuousTicks());
-            case BuiltInConditions.VisitLocation value -> "Visit " + locationTarget(value.location());
-            case BuiltInConditions.PlayerDeath value -> value.damageSource()
-                    .map(source -> "Die from " + damageTarget(ops, source))
-                    .orElse("Die once");
             case BuiltInConditions.ObtainAdvancement value -> "Complete " + humanize(value.advancement()) + " advancement";
             case BuiltInConditions.ExplicitSignal value when value.count() > 1 -> "Trigger " + humanize(value.signal()) + " " + value.count() + " times";
             case BuiltInConditions.ExplicitSignal value -> "Trigger " + humanize(value.signal());
-            case BuiltInConditions.UninterruptedFall value ->
-                    "Fall " + number(value.minimumDistance()) + " blocks from "
-                            + locationTarget(value.start()) + " to " + locationTarget(value.end())
-                            + (value.requireSurvival() ? " and survive" : "");
             default -> humanize(condition.type().id());
         };
     }

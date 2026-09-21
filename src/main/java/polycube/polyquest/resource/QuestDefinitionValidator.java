@@ -106,19 +106,7 @@ public final class QuestDefinitionValidator {
         switch (definition) {
             case BuiltInConditions.AdvancementCriterion value -> validateCriterion(value, path, errors);
             case BuiltInConditions.ConsumeItems value when value.count() <= 0 -> errors.add(path + ": count must be positive");
-            case BuiltInConditions.FishItem value when value.count() <= 0 -> errors.add(path + ": count must be positive");
-            case BuiltInConditions.KillEntity value when value.count() <= 0 -> errors.add(path + ": count must be positive");
-            case BuiltInConditions.BreakBlock value when value.count() <= 0 -> errors.add(path + ": count must be positive");
-            case BuiltInConditions.VisitLocation value when value.continuousTicks() <= 0 -> errors.add(path + ": continuous_ticks must be positive");
             case BuiltInConditions.ExplicitSignal value when value.count() <= 0 -> errors.add(path + ": count must be positive");
-            case BuiltInConditions.UninterruptedFall value -> {
-                if (!Double.isFinite(value.minimumDistance()) || value.minimumDistance() < 0.0) {
-                    errors.add(path + ": minimum_distance must be a finite non-negative number");
-                }
-                if (!Double.isFinite(value.rules().teleportThreshold()) || value.rules().teleportThreshold() <= 0.0) {
-                    errors.add(path + ": rules.teleport_threshold must be a finite positive number");
-                }
-            }
             case CompositeConditions.AllOf value -> validateChildren(value.children(), path, true, errors);
             case CompositeConditions.AnyOf value -> validateChildren(value.children(), path, true, errors);
             case CompositeConditions.Sequence value -> {

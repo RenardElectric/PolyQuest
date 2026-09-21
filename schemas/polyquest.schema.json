@@ -41,37 +41,6 @@
         }
       ]
     },
-    "numberBounds": {
-      "title": "Minecraft number bounds",
-      "oneOf": [
-        { "type": "number" },
-        {
-          "type": "object",
-          "properties": {
-            "min": { "type": "number" },
-            "max": { "type": "number" }
-          },
-          "additionalProperties": false
-        }
-      ]
-    },
-    "stateProperties": {
-      "title": "Minecraft block or fluid state properties",
-      "type": "object",
-      "additionalProperties": {
-        "oneOf": [
-          { "type": "string" },
-          {
-            "type": "object",
-            "properties": {
-              "min": { "type": "string" },
-              "max": { "type": "string" }
-            },
-            "additionalProperties": false
-          }
-        ]
-      }
-    },
     "componentMap": {
       "title": "Minecraft data components",
       "description": "A Mojang data-component map. Component values use the codec registered for each component identifier.",
@@ -93,96 +62,6 @@
         "count": { "$ref": "#/$defs/integerBounds" },
         "components": { "$ref": "#/$defs/componentMap" },
         "predicates": { "$ref": "#/$defs/componentPredicateMap" }
-      },
-      "additionalProperties": false
-    },
-    "blockPredicate": {
-      "title": "Minecraft block predicate",
-      "description": "Decoded directly by Mojang's BlockPredicate codec.",
-      "type": "object",
-      "properties": {
-        "blocks": { "$ref": "#/$defs/registryReferenceSet" },
-        "state": { "$ref": "#/$defs/stateProperties" },
-        "nbt": { "type": "string", "description": "An SNBT compound predicate." },
-        "components": { "$ref": "#/$defs/componentMap" },
-        "predicates": { "$ref": "#/$defs/componentPredicateMap" }
-      },
-      "additionalProperties": false
-    },
-    "fluidPredicate": {
-      "title": "Minecraft fluid predicate",
-      "type": "object",
-      "properties": {
-        "fluids": { "$ref": "#/$defs/registryReferenceSet" },
-        "state": { "$ref": "#/$defs/stateProperties" }
-      },
-      "additionalProperties": false
-    },
-    "lightPredicate": {
-      "title": "Minecraft light predicate",
-      "type": "object",
-      "properties": {
-        "light": { "$ref": "#/$defs/integerBounds" }
-      },
-      "additionalProperties": false
-    },
-    "positionPredicate": {
-      "title": "Minecraft position predicate",
-      "type": "object",
-      "properties": {
-        "x": { "$ref": "#/$defs/numberBounds" },
-        "y": { "$ref": "#/$defs/numberBounds" },
-        "z": { "$ref": "#/$defs/numberBounds" }
-      },
-      "additionalProperties": false
-    },
-    "locationPredicate": {
-      "title": "Minecraft location predicate",
-      "description": "Decoded directly by Mojang's LocationPredicate codec.",
-      "type": "object",
-      "properties": {
-        "position": { "$ref": "#/$defs/positionPredicate" },
-        "biomes": { "$ref": "#/$defs/registryReferenceSet" },
-        "structures": { "$ref": "#/$defs/registryReferenceSet" },
-        "dimension": { "$ref": "#/$defs/identifier" },
-        "smokey": { "type": "boolean" },
-        "light": { "$ref": "#/$defs/lightPredicate" },
-        "block": { "$ref": "#/$defs/blockPredicate" },
-        "fluid": { "$ref": "#/$defs/fluidPredicate" },
-        "can_see_sky": { "type": "boolean" }
-      },
-      "additionalProperties": false
-    },
-    "entityPredicate": {
-      "title": "Minecraft entity predicate",
-      "description": "Decoded directly by Mojang's registry-dispatched EntityPredicate codec. Its keys are Minecraft entity-sub-predicate type identifiers, so this object remains extensible for registered types.",
-      "type": "object",
-      "propertyNames": { "$ref": "#/$defs/identifier" },
-      "additionalProperties": true
-    },
-    "damageSourceTagPredicate": {
-      "title": "Minecraft damage-source tag predicate",
-      "type": "object",
-      "required": ["id", "expected"],
-      "properties": {
-        "id": { "$ref": "#/$defs/registryReferenceSet" },
-        "expected": { "type": "boolean" }
-      },
-      "additionalProperties": false
-    },
-    "damageSourcePredicate": {
-      "title": "Minecraft damage-source predicate",
-      "description": "Decoded directly by Mojang's DamageSourcePredicate codec.",
-      "type": "object",
-      "properties": {
-        "tags": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/damageSourceTagPredicate" },
-          "default": []
-        },
-        "direct_entity": { "$ref": "#/$defs/entityPredicate" },
-        "source_entity": { "$ref": "#/$defs/entityPredicate" },
-        "is_direct": { "type": "boolean" }
       },
       "additionalProperties": false
     },
@@ -290,23 +169,25 @@
         }
       ]
     },
-    "fallRules": {
-      "title": "Uninterrupted-fall rules",
-      "type": "object",
-      "properties": {
-        "allow_water": { "type": "boolean", "default": false },
-        "allow_lava": { "type": "boolean", "default": false },
-        "allow_climbing": { "type": "boolean", "default": false },
-        "allow_elytra": { "type": "boolean", "default": false },
-        "allow_vehicles": { "type": "boolean", "default": false },
-        "teleport_threshold": { "type": "number", "exclusiveMinimum": 0, "default": 16.0 }
-      },
-      "additionalProperties": false
-    },
     "conditionChildren": {
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "#/$defs/condition" }
+    },
+    "advancementCriterionCondition": {
+      "title": "Minecraft advancement criterion",
+      "description": "Uses Minecraft's advancement criterion codec. The contents of conditions depend on the selected trigger and are intentionally left open-ended.",
+      "type": "object",
+      "required": ["type", "trigger"],
+      "properties": {
+        "type": { "const": "polyquest:advancement_criterion" },
+        "trigger": { "$ref": "#/$defs/identifier" },
+        "conditions": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
     },
     "consumeItemsCondition": {
       "title": "Consume items at claim time",
@@ -316,62 +197,6 @@
         "type": { "const": "polyquest:consume_items" },
         "item": { "$ref": "#/$defs/itemPredicate" },
         "count": { "type": "integer", "minimum": 1 }
-      },
-      "additionalProperties": false
-    },
-    "fishItemCondition": {
-      "title": "Fish an item",
-      "type": "object",
-      "required": ["type", "item"],
-      "properties": {
-        "type": { "const": "polyquest:fish_item" },
-        "item": { "$ref": "#/$defs/itemPredicate" },
-        "count": { "type": "integer", "minimum": 1, "default": 1 }
-      },
-      "additionalProperties": false
-    },
-    "killEntityCondition": {
-      "title": "Kill an entity",
-      "type": "object",
-      "required": ["type", "victim"],
-      "properties": {
-        "type": { "const": "polyquest:kill_entity" },
-        "victim": { "$ref": "#/$defs/entityPredicate" },
-        "damage_source": { "$ref": "#/$defs/damageSourcePredicate" },
-        "count": { "type": "integer", "minimum": 1, "default": 1 }
-      },
-      "additionalProperties": false
-    },
-    "breakBlockCondition": {
-      "title": "Break a block",
-      "type": "object",
-      "required": ["type", "block"],
-      "properties": {
-        "type": { "const": "polyquest:break_block" },
-        "block": { "$ref": "#/$defs/blockPredicate" },
-        "tool": { "$ref": "#/$defs/itemPredicate" },
-        "count": { "type": "integer", "minimum": 1, "default": 1 }
-      },
-      "additionalProperties": false
-    },
-    "visitLocationCondition": {
-      "title": "Visit a location",
-      "type": "object",
-      "required": ["type", "location"],
-      "properties": {
-        "type": { "const": "polyquest:visit_location" },
-        "location": { "$ref": "#/$defs/locationPredicate" },
-        "continuous_ticks": { "type": "integer", "minimum": 1, "default": 1 }
-      },
-      "additionalProperties": false
-    },
-    "playerDeathCondition": {
-      "title": "Player death",
-      "type": "object",
-      "required": ["type"],
-      "properties": {
-        "type": { "const": "polyquest:player_death" },
-        "damage_source": { "$ref": "#/$defs/damageSourcePredicate" }
       },
       "additionalProperties": false
     },
@@ -393,20 +218,6 @@
         "type": { "const": "polyquest:explicit_signal" },
         "signal": { "$ref": "#/$defs/identifier" },
         "count": { "type": "integer", "minimum": 1, "default": 1 }
-      },
-      "additionalProperties": false
-    },
-    "uninterruptedFallCondition": {
-      "title": "Complete an uninterrupted fall",
-      "type": "object",
-      "required": ["type", "start", "end"],
-      "properties": {
-        "type": { "const": "polyquest:uninterrupted_fall" },
-        "start": { "$ref": "#/$defs/locationPredicate" },
-        "end": { "$ref": "#/$defs/locationPredicate" },
-        "minimum_distance": { "type": "number", "minimum": 0, "default": 0.0 },
-        "require_survival": { "type": "boolean", "default": true },
-        "rules": { "$ref": "#/$defs/fallRules" }
       },
       "additionalProperties": false
     },
@@ -531,15 +342,10 @@
     "condition": {
       "title": "PolyQuest condition",
       "oneOf": [
+        { "$ref": "#/$defs/advancementCriterionCondition" },
         { "$ref": "#/$defs/consumeItemsCondition" },
-        { "$ref": "#/$defs/fishItemCondition" },
-        { "$ref": "#/$defs/killEntityCondition" },
-        { "$ref": "#/$defs/breakBlockCondition" },
-        { "$ref": "#/$defs/visitLocationCondition" },
-        { "$ref": "#/$defs/playerDeathCondition" },
         { "$ref": "#/$defs/obtainAdvancementCondition" },
         { "$ref": "#/$defs/explicitSignalCondition" },
-        { "$ref": "#/$defs/uninterruptedFallCondition" },
         { "$ref": "#/$defs/allOfCondition" },
         { "$ref": "#/$defs/anyOfCondition" },
         { "$ref": "#/$defs/repeatCondition" },

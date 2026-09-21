@@ -133,6 +133,44 @@ final class QuestSchemaTest {
                 .getAsJsonObject("rewards").get("minItems").getAsInt());
     }
 
+    @Test
+    void conditionSchemasExposeTheCurrentBuiltInTypes() throws IOException {
+        JsonObject definitions = read(
+                SCHEMA_DIRECTORY.resolve("polyquest.schema.json"),
+                new HashMap<>()).getAsJsonObject().getAsJsonObject("$defs");
+
+        JsonObject advancementCriterion = definitions.getAsJsonObject("advancementCriterionCondition");
+        assertObjectFields(
+                advancementCriterion,
+                Set.of("type", "trigger", "conditions"),
+                Set.of("type", "trigger")
+        );
+        JsonObject criterionProperties = advancementCriterion.getAsJsonObject("properties");
+        assertEquals("#/$defs/identifier", criterionProperties
+                .getAsJsonObject("trigger").get("$ref").getAsString());
+        assertTrue(criterionProperties.getAsJsonObject("conditions")
+                .get("additionalProperties").getAsBoolean());
+
+        Set<String> conditionReferences = new HashSet<>();
+        for (JsonElement element : definitions.getAsJsonObject("condition").getAsJsonArray("oneOf")) {
+            conditionReferences.add(element.getAsJsonObject().get("$ref").getAsString());
+        }
+        assertEquals(Set.of(
+                "#/$defs/advancementCriterionCondition",
+                "#/$defs/consumeItemsCondition",
+                "#/$defs/obtainAdvancementCondition",
+                "#/$defs/explicitSignalCondition",
+                "#/$defs/allOfCondition",
+                "#/$defs/anyOfCondition",
+                "#/$defs/repeatCondition",
+                "#/$defs/sequenceCondition",
+                "#/$defs/timeWindowCondition",
+                "#/$defs/nOfMCondition",
+                "#/$defs/optionalCondition",
+                "#/$defs/choiceCondition"
+        ), conditionReferences);
+    }
+
     private static void resolveReferences(
             Path currentFile, JsonElement element, Map<Path, JsonElement> documents
     ) throws IOException {

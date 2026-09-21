@@ -34,15 +34,15 @@ quest journal.
 
 ## What you can do
 
-| Functionality                    | What it means in-game                                                                                             |
-|----------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| **Complete daily quests**        | Each day can offer one easy, one medium and one hard quest shared by every player on the server.                  |
-| **Take on unique quests**        | Permanent, one-time objectives never rotate, and each reward can be claimed once.                                 |
-| **Progress through normal play** | Quests can react to item deliveries, fishing, combat, block breaking, exploration, deaths, advancements and more. |
-| **Follow multi-step objectives** | A quest can combine goals into sequences, choices, repeats, time limits and other composite challenges.           |
-| **Browse a quest journal**       | An inventory-style menu shows each quest's objective, progress, availability, expiry and rewards.                 |
-| **Claim useful rewards**         | Completed quests can award items, experience, economy currency or server-defined command rewards.                 |
-| **Play without a client mod**    | Quest logic and menus run on the server; multiplayer players do not need the PolyQuest JAR.                       |
+| Functionality                    | What it means in-game                                                                                         |
+|----------------------------------|---------------------------------------------------------------------------------------------------------------|
+| **Complete daily quests**        | Each day can offer one easy, one medium and one hard quest shared by every player on the server.              |
+| **Take on unique quests**        | Permanent, one-time objectives never rotate, and each reward can be claimed once.                             |
+| **Progress through normal play** | Quests can react to item deliveries, fishing, combat, exploration, crafting, item use, advancements and more. |
+| **Follow multi-step objectives** | A quest can combine goals into sequences, choices, repeats, time limits and other composite challenges.       |
+| **Browse a quest journal**       | An inventory-style menu shows each quest's objective, progress, availability, expiry and rewards.             |
+| **Claim useful rewards**         | Completed quests can award items, experience, economy currency or server-defined command rewards.             |
+| **Play without a client mod**    | Quest logic and menus run on the server; multiplayer players do not need the PolyQuest JAR.                   |
 
 PolyQuest is an engine rather than a built-in quest pack. The server decides which quests and rewards
 are available.
@@ -84,17 +84,38 @@ then see [Adding quests](#adding-quests).
 
 ### Built-in objectives
 
-| Objective type          | Example use                                                |
-|-------------------------|------------------------------------------------------------|
-| Consume items           | Deliver a quantity of matching items when claiming.        |
-| Fish an item            | Catch an item that matches a configured predicate.         |
-| Kill an entity          | Defeat a matching mob, optionally under extra conditions.  |
-| Break a block           | Mine or break a matching block with an optional tool rule. |
-| Visit a location        | Reach an area described by a Minecraft location predicate. |
-| Player death            | React to a matching player-death event.                    |
-| Obtain an advancement   | Complete a specified advancement.                          |
-| Explicit signal         | Let another server system advance a quest by signal ID.    |
-| Uninterrupted fall      | Complete a configured fall from start to landing.          |
+| Objective type                  | Example use                                                                                |
+|---------------------------------|--------------------------------------------------------------------------------------------|
+| Minecraft advancement criterion | React to any registered advancement trigger using its native, trigger-specific conditions. |
+| Consume items                   | Deliver a quantity of matching items when claiming.                                        |
+| Obtain an advancement           | Complete a specified advancement.                                                          |
+| Explicit signal                 | Let another server system advance a quest by signal ID.                                    |
+
+Most gameplay objectives use `polyquest:advancement_criterion`. Its `trigger` and `conditions` fields
+are decoded by Minecraft exactly like one criterion inside a vanilla advancement, but PolyQuest creates
+the temporary listener directly from the quest; a separate advancement JSON file is not required.
+
+For example, this condition completes when the player kills a zombie:
+
+```json
+{
+  "type": "polyquest:advancement_criterion",
+  "trigger": "minecraft:player_killed_entity",
+  "conditions": {
+    "entity": {
+      "type": "minecraft:entity_properties",
+      "entity": "this",
+      "predicate": {
+        "minecraft:entity_type": "minecraft:zombie"
+      }
+    }
+  }
+}
+```
+
+The `conditions` object depends on the selected trigger and follows Minecraft's advancement format.
+Older `fish_item`, `kill_entity`, `break_block`, `visit_location`, `player_death` and
+`uninterrupted_fall` condition types are no longer registered.
 
 Objectives can be combined with `all_of`, `any_of`, `repeat`, `sequence`, `time_window`, `n_of_m`,
 `optional` and `choice` conditions. Server datapacks control the exact targets, counts and rules.
@@ -166,12 +187,10 @@ Daily quests require an `easy`, `medium` or `hard` difficulty. PolyQuest determi
 quest for each difficulty and rotates them at midnight in the configured time zone. Unique quests are
 permanent and have no difficulty.
 
-Use the [JSON schemas](schemas) as the authoritative field reference. The
-[datapack format guide](docs/DATAPACK_FORMAT.md) and [example resources](examples/datapack) illustrate
-the general layout, but the schemas reflect the current codecs. In particular, a `polyquest:money`
-reward requires `amount`, `formatted_amount` and `currency`. The example directories are development
-fixtures and do not include a `pack.mcmeta`; add the correct file for the targeted Minecraft version
-before installing one as a datapack.
+Use the [JSON schemas](schemas) as the authoritative field reference. For an
+`advancement_criterion`, the schema accepts any object under `conditions` because its fields depend on
+the selected Minecraft trigger; `/reload` still decodes and validates that object through Minecraft's
+criterion codec. A `polyquest:money` reward requires `amount`, `formatted_amount` and `currency`.
 
 Run vanilla `/reload` after changing resources. PolyQuest validates the entire candidate catalog before
 publishing it; if any quest, template or reward profile is invalid, the previous working catalog stays

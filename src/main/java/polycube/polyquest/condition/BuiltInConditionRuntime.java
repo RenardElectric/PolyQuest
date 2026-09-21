@@ -16,46 +16,6 @@ import java.util.List;
 
 /// Mutable implementations for the immutable definitions in {@link BuiltInConditions}.
 final class BuiltInConditionRuntime {
-    /// Completes from a fake advancement listener managed by the server-scoped criterion tracker.
-    static final class AdvancementCriterionInstance extends BaseInstance<BuiltInConditions.AdvancementCriterion> {
-        private final ConditionRuntime.CriterionRegistration registration;
-
-        AdvancementCriterionInstance(BuiltInConditions.AdvancementCriterion definition, ConditionRuntime.CreationContext context) {
-            super(definition, context);
-            registration = context.register(definition.criterion());
-        }
-
-        @Override
-        public ConditionRuntime.Update onSignal(QuestSignal signal, ConditionRuntime.EvaluationContext context) {
-            if (completed
-                    || !(signal instanceof QuestSignal.CriteriaMatched matched)
-                    || !matched.registrationIds().contains(registration.id())) {
-                return ConditionRuntime.Update.NONE;
-            }
-            completed = true;
-            registration.deactivate();
-            return ConditionRuntime.Update.changed(true);
-        }
-
-        @Override
-        public void reset() {
-            super.reset();
-            registration.activate();
-        }
-
-        @Override
-        public void close() {
-            registration.close();
-        }
-
-        @Override
-        public JsonObject diagnostic() {
-            JsonObject result = super.diagnostic();
-            result.addProperty("trigger", String.valueOf(BuiltInRegistries.TRIGGER_TYPES.getKey(definition.criterion().trigger())));
-            return result;
-        }
-    }
-
     /// A base class for conditions that track a boolean completion state.
     private abstract static class BaseInstance<D extends ConditionApi.Definition> implements ConditionRuntime.Instance {
         protected final D definition;
@@ -121,6 +81,46 @@ final class BuiltInConditionRuntime {
             JsonObject result = super.diagnostic();
             result.addProperty("current", current);
             result.addProperty("target", target);
+            return result;
+        }
+    }
+
+    /// Completes from a fake advancement listener managed by the server-scoped criterion tracker.
+    static final class AdvancementCriterionInstance extends BaseInstance<BuiltInConditions.AdvancementCriterion> {
+        private final ConditionRuntime.CriterionRegistration registration;
+
+        AdvancementCriterionInstance(BuiltInConditions.AdvancementCriterion definition, ConditionRuntime.CreationContext context) {
+            super(definition, context);
+            registration = context.register(definition.criterion());
+        }
+
+        @Override
+        public ConditionRuntime.Update onSignal(QuestSignal signal, ConditionRuntime.EvaluationContext context) {
+            if (completed
+                    || !(signal instanceof QuestSignal.CriteriaMatched matched)
+                    || !matched.registrationIds().contains(registration.id())) {
+                return ConditionRuntime.Update.NONE;
+            }
+            completed = true;
+            registration.deactivate();
+            return ConditionRuntime.Update.changed(true);
+        }
+
+        @Override
+        public void reset() {
+            super.reset();
+            registration.activate();
+        }
+
+        @Override
+        public void close() {
+            registration.close();
+        }
+
+        @Override
+        public JsonObject diagnostic() {
+            JsonObject result = super.diagnostic();
+            result.addProperty("trigger", String.valueOf(BuiltInRegistries.TRIGGER_TYPES.getKey(definition.criterion().trigger())));
             return result;
         }
     }

@@ -2,6 +2,7 @@ package polycube.polyquest.runtime;
 
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.persistence.QuestLedger;
 import polycube.polyquest.resource.QuestCatalogManager;
@@ -17,29 +18,37 @@ public final class QuestEngine implements AutoCloseable {
     private final QuestCatalogManager catalogs;
     private final DailyRotationService rotation;
     private final QuestLedger ledger;
+    private final ConditionRuntime.CriterionRegistrar criteria;
     private final Map<UUID, PlayerQuestSession> sessions = new HashMap<>();
     private List<QuestModel.Occurrence> availableOccurrences = List.of();
 
-    public QuestEngine(MinecraftServer server, QuestCatalogManager catalogs, DailyRotationService rotation, QuestLedger ledger) {
+    public QuestEngine(
+            MinecraftServer server,
+            QuestCatalogManager catalogs,
+            DailyRotationService rotation,
+            QuestLedger ledger,
+            ConditionRuntime.CriterionRegistrar criteria
+    ) {
         this.server = server;
         this.catalogs = catalogs;
         this.rotation = rotation;
         this.ledger = ledger;
+        this.criteria = criteria;
         rebuildAvailableOccurrences();
     }
 
     /// Fans a player signal into every available, unclaimed occurrence, creating attempts lazily.
     boolean onSignal(QuestSignal signal) {
-        UUID playerId = signal.player().getUUID();
-        PlayerQuestSession session = sessions.get(playerId);
+        var playerId = signal.player().getUUID();
+        var session = sessions.get(playerId);
         boolean changed = false;
-        for (QuestModel.Occurrence occurrence : available(playerId)) {
+        for (QuestModel.Occurrence occurrence : available()) {
             if (ledger.isClaimed(playerId, occurrence.key())
                     || ledger.hasPending(playerId, occurrence.key())) {
                 continue;
             }
             if (session == null) {
-                session = new PlayerQuestSession();
+                session = new PlayerQuestSession(playerId, criteria);
                 sessions.put(playerId, session);
             }
             changed |= session.getOrCreate(occurrence, server).onSignal(signal, server).changed();
@@ -58,20 +67,22 @@ public final class QuestEngine implements AutoCloseable {
         return changed;
     }
 
-    /// Returns globally selected occurrences; claimed and pending state is filtered by callers.
-    public List<QuestModel.Occurrence> available(UUID playerId) {
+    /// Returns globally selected occurrences.
+    public List<QuestModel.Occurrence> available() {
         return availableOccurrences;
     }
 
-    public Optional<QuestModel.Occurrence> findOccurrence(UUID playerId, Identifier questId) {
-        return available(playerId).stream()
+    public Optional<QuestModel.Occurrence> findOccurrence(Identifier questId) {
+        return available().stream()
                 .filter(occurrence -> occurrence.definition().id().equals(questId))
                 .findFirst();
     }
 
     /// Gets the mutable attempt and projects any durable claimed or pending state onto it.
     public QuestAttempt attempt(UUID playerId, QuestModel.Occurrence occurrence) {
-        QuestAttempt attempt = sessions.computeIfAbsent(playerId, ignored -> new PlayerQuestSession()).getOrCreate(occurrence, server);
+        QuestAttempt attempt = sessions
+                .computeIfAbsent(playerId, id -> new PlayerQuestSession(id, criteria))
+                .getOrCreate(occurrence, server);
         if (ledger.isClaimed(playerId, occurrence.key())) {
             attempt.markClaimed();
         } else if (ledger.hasPending(playerId, occurrence.key())) {
@@ -94,6 +105,7 @@ public final class QuestEngine implements AutoCloseable {
         sessions.values().forEach(session -> session.removeIf(attempt ->
                 attempt.occurrence().key().scope() instanceof QuestModel.DailyScope
                         && !activeKeys.contains(attempt.occurrence().key())));
+        activateOnlinePlayers();
     }
 
     boolean reset(UUID playerId, QuestModel.Occurrence occurrence) {
@@ -101,6 +113,17 @@ public final class QuestEngine implements AutoCloseable {
                 .map(session -> session.removeOccurrence(occurrence.key()))
                 .orElse(false);
         return ledger.resetClaim(playerId, occurrence.key()) || attemptRemoved;
+    }
+
+    /// Materializes current attempts so vanilla triggers are listening before gameplay events fire.
+    void playerJoined(ServerPlayer player) {
+        var playerId = player.getUUID();
+        var session = sessions.computeIfAbsent(playerId, id -> new PlayerQuestSession(id, criteria));
+        for (var occurrence : available()) {
+            if (!durablyCompleted(playerId, occurrence.key())) {
+                session.getOrCreate(occurrence, server);
+            }
+        }
     }
 
     /// Reconciles live attempts with a reloaded catalog and reports players whose progress was reset due to a behavior change.
@@ -132,6 +155,7 @@ public final class QuestEngine implements AutoCloseable {
             }
             entry.getValue().updateOccurrences(currentOccurrences);
         }
+        activateOnlinePlayers();
         return List.copyOf(resets);
     }
 
@@ -149,8 +173,13 @@ public final class QuestEngine implements AutoCloseable {
         return ledger.isClaimed(playerId, key) || ledger.hasPending(playerId, key);
     }
 
+    private void activateOnlinePlayers() {
+        server.getPlayerList().getPlayers().forEach(this::playerJoined);
+    }
+
     @Override
     public void close() {
+        sessions.values().forEach(PlayerQuestSession::close);
         sessions.clear();
     }
 }

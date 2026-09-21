@@ -52,7 +52,7 @@ public final class ListCommand extends PolyCommand {
 
     private static int list(CommandSourceStack source, NameAndId player) throws CommandSyntaxException {
         var manager = CommandResult.require(PolyQuestApi.manager());
-        List<QuestEntry> quests = CommandResult.require(PolyQuestApi.availableQuests(player)).stream()
+        List<QuestEntry> quests = CommandResult.require(PolyQuestApi.availableQuests()).stream()
                 .sorted(Comparator.comparingInt(ListCommand::displayOrder).thenComparing(occurrence -> occurrence.definition().id().toString()))
                 .map(occurrence -> new QuestEntry(occurrence, manager.attempt(player, occurrence).status()))
                 .toList();

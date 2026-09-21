@@ -41,7 +41,7 @@ public final class UniqueQuestGui extends QuestGui {
         renderBackground();
 
         var attemptsCount = QuestModel.AttemptStatus.values().length;
-        var dailyQuests = manager.available(player.nameAndId()).stream()
+        var dailyQuests = manager.available().stream()
                 .filter(quest -> quest.definition().availability() == QuestModel.Availability.UNIQUE)
                 .sorted(Comparator
                         .comparingInt((QuestModel.Occurrence quest) -> attemptsCount - manager.attempt(player.nameAndId(), quest).status().ordinal())

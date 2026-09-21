@@ -27,17 +27,17 @@ public final class PolyQuestApi {
     }
 
     /// Returns the quest occurrence for the given player and quest ID, if the quest manager is installed.
-    public static DataResult<QuestModel.Occurrence> quest(NameAndId player, Identifier questId) {
+    public static DataResult<QuestModel.Occurrence> quest(Identifier questId) {
         return manager().flatMap(
                 manager ->
-                        manager.findOccurrence(player, questId).map(DataResult::success)
-                                .orElse(DataResult.error(() -> "Quest not found for player " + player + ": " + questId))
+                        manager.findOccurrence(questId).map(DataResult::success)
+                                .orElse(DataResult.error(() -> "Quest not found: " + questId))
         );
     }
 
     /// Returns the list of quests available to the given player, if the quest manager is installed.
-    public static DataResult<List<QuestModel.Occurrence>> availableQuests(NameAndId player) {
-        return manager().map(value -> value.available(player));
+    public static DataResult<List<QuestModel.Occurrence>> availableQuests() {
+        return manager().map(QuestManager::available);
     }
 
     /// Emits a quest signal to the quest manager, if installed.
@@ -56,7 +56,7 @@ public final class PolyQuestApi {
     public static DataResult<QuestManager> reset(NameAndId player, Identifier questId) {
         return manager().flatMap(
                 manager ->
-                        quest(player, questId).map(oc -> {
+                        quest(questId).map(oc -> {
                             manager.reset(player, oc);
                             return manager;
                         })
@@ -72,7 +72,7 @@ public final class PolyQuestApi {
     public static DataResult<String> inspect(NameAndId player, Identifier questId) {
         return manager().flatMap(
                 manager ->
-                        quest(player, questId).map(oc -> {
+                        quest(questId).map(oc -> {
                             var attempt = manager.attempt(player, oc);
                             return GSON.toJson(attempt.diagnostic());
                         })

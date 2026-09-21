@@ -14,12 +14,14 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
+import java.util.Set;
 
 /// Normalized server-thread events consumed by condition instances.
 public sealed interface QuestSignal
         permits QuestSignal.Kill, QuestSignal.Fishing,
         QuestSignal.BlockBroken, QuestSignal.PlayerDeath,
-        QuestSignal.Advancement, QuestSignal.PlayerTick, QuestSignal.Explicit {
+        QuestSignal.Advancement, QuestSignal.CriteriaMatched,
+        QuestSignal.PlayerTick, QuestSignal.Explicit {
     ServerPlayer player();
 
     long serverTick();
@@ -45,6 +47,17 @@ public sealed interface QuestSignal
     record PlayerDeath(ServerPlayer player, long serverTick, DamageSource damageSource) implements QuestSignal {}
 
     record Advancement(ServerPlayer player, long serverTick, AdvancementHolder advancement) implements QuestSignal {}
+
+    /// All fake advancement criteria matched by one trigger evaluation.
+    record CriteriaMatched(
+            ServerPlayer player,
+            long serverTick,
+            Set<Identifier> registrationIds
+    ) implements QuestSignal {
+        public CriteriaMatched {
+            registrationIds = Set.copyOf(registrationIds);
+        }
+    }
 
     record PlayerTick(ServerPlayer player, long serverTick) implements QuestSignal {}
 

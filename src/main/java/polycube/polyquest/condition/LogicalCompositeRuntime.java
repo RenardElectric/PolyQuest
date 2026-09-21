@@ -192,6 +192,11 @@ final class LogicalCompositeRuntime {
         }
 
         @Override
+        public void close() {
+            child.close();
+        }
+
+        @Override
         public JsonObject diagnostic() {
             JsonObject result = new JsonObject();
             result.addProperty("type", definition.type().id().toString());
@@ -287,6 +292,11 @@ final class LogicalCompositeRuntime {
         public void reset() {
             selected = -1;
             branches.forEach(ConditionRuntime.Instance::reset);
+        }
+
+        @Override
+        public void close() {
+            branches.forEach(ConditionRuntime.Instance::close);
         }
 
         /// Locks the choice to one branch and clears progress from every alternative.

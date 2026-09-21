@@ -8,6 +8,7 @@ import net.minecraft.advancements.predicates.DamageSourcePredicate;
 import net.minecraft.advancements.predicates.ItemPredicate;
 import net.minecraft.advancements.predicates.LocationPredicate;
 import net.minecraft.advancements.predicates.entity.EntityPredicate;
+import net.minecraft.advancements.triggers.Criterion;
 import net.minecraft.resources.Identifier;
 import polycube.polyquest.PolyQuest;
 
@@ -20,6 +21,21 @@ import static polycube.polyquest.condition.ConditionApi.Semantics.constant;
 /// Datapack definitions for PolyQuest's vanilla-predicate-backed atomic conditions.
 /// Mutable player state is kept separately in {@link BuiltInConditionRuntime}.
 public final class BuiltInConditions {
+    /// Uses any criterion trigger registered in Minecraft's advancement system.
+    public record AdvancementCriterion(Criterion<?> criterion) implements ConditionApi.Definition {
+        public static final MapCodec<AdvancementCriterion> CODEC = MapCodec
+                .assumeMapUnsafe(Criterion.CODEC)
+                .xmap(AdvancementCriterion::new, AdvancementCriterion::criterion);
+        public static final ConditionApi.Type<AdvancementCriterion> TYPE = new ConditionApi.Type<>(
+                PolyQuest.id("advancement_criterion"), CODEC,
+                BuiltInConditionRuntime.AdvancementCriterionInstance::new, constant(SIGNAL_DRIVEN));
+
+        @Override
+        public ConditionApi.Type<AdvancementCriterion> type() {
+            return TYPE;
+        }
+    }
+
     /// Consumes a specified number of items from the player's inventory.
     public record ConsumeItems(ItemPredicate item, int count) implements ConditionApi.Definition {
         public static final MapCodec<ConsumeItems> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
@@ -194,6 +210,7 @@ public final class BuiltInConditions {
     }
 
     public static void register() {
+        ConditionApi.register(AdvancementCriterion.TYPE);
         ConditionApi.register(ConsumeItems.TYPE);
         ConditionApi.register(FishItem.TYPE);
         ConditionApi.register(KillEntity.TYPE);

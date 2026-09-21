@@ -1,7 +1,10 @@
 package polycube.polyquest.resource;
 
+import net.minecraft.core.HolderLookup;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.item.ItemStackTemplate;
+import net.minecraft.world.level.storage.loot.ValidationContextSource;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.condition.CompositeConditions;
 import polycube.polyquest.condition.ConditionApi;
@@ -14,6 +17,16 @@ import java.util.*;
 
 /// Semantic validation performed after codec decoding and template expansion.
 public final class QuestDefinitionValidator {
+    private final Optional<HolderLookup.Provider> registries;
+
+    public QuestDefinitionValidator() {
+        this.registries = Optional.empty();
+    }
+
+    public QuestDefinitionValidator(HolderLookup.Provider registries) {
+        this.registries = Optional.of(registries);
+    }
+
     public List<String> validate(QuestModel.Definition quest, Map<Identifier, RewardApi.Profile> profiles) {
         List<String> errors = new ArrayList<>();
         String prefix = "Quest '" + quest.id() + "': ";
@@ -75,8 +88,23 @@ public final class QuestDefinitionValidator {
         }
     }
 
+    /// Applies the same predicate validation Minecraft runs for advancement criteria.
+    private void validateCriterion(
+            BuiltInConditions.AdvancementCriterion definition,
+            String path,
+            List<String> errors
+    ) {
+        if (registries.isEmpty()) {
+            return;
+        }
+        var problems = new ProblemReporter.Collector();
+        definition.criterion().triggerInstance().validate(new ValidationContextSource(problems, registries.orElseThrow()));
+        problems.forEach((childPath, problem) -> errors.add(path + childPath + ": " + problem.description()));
+    }
+
     private void validateCondition(ConditionApi.Definition definition, String path, List<String> errors) {
         switch (definition) {
+            case BuiltInConditions.AdvancementCriterion value -> validateCriterion(value, path, errors);
             case BuiltInConditions.ConsumeItems value when value.count() <= 0 -> errors.add(path + ": count must be positive");
             case BuiltInConditions.FishItem value when value.count() <= 0 -> errors.add(path + ": count must be positive");
             case BuiltInConditions.KillEntity value when value.count() <= 0 -> errors.add(path + ": count must be positive");

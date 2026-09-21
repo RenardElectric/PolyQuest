@@ -1,10 +1,10 @@
 package polycube.polyquest.runtime;
 
+import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
-import org.jspecify.annotations.Nullable;
 import polycube.polyquest.claim.QuestClaimService;
 import polycube.polyquest.commands.QuestCommandText;
 import polycube.polyquest.config.QuestConfig;
@@ -24,6 +24,7 @@ public final class QuestManager {
     private final QuestCatalogManager catalogs;
     private final QuestLedger ledger;
     private final DailyRotationService rotation;
+    private final AdvancementCriterionTracker advancementCriteria;
     private final QuestEngine engine;
     private final QuestClaimService claims;
     private final QuestChangeNotifier questChanges = new QuestChangeNotifier();
@@ -37,7 +38,8 @@ public final class QuestManager {
         this.catalogs = catalogs;
         this.ledger = QuestLedger.load(server);
         this.rotation = new DailyRotationService(config);
-        this.engine = new QuestEngine(server, catalogs, rotation, ledger);
+        this.advancementCriteria = new AdvancementCriterionTracker(server);
+        this.engine = new QuestEngine(server, catalogs, rotation, ledger, advancementCriteria);
         this.claims = new QuestClaimService(server, engine, ledger, catalogs, questChanges::changed);
         this.catalogSubscription = this.catalogs.addListener(this::onCatalogChanged);
         refreshRotationAndEngine();
@@ -90,6 +92,8 @@ public final class QuestManager {
     }
 
     public void onPlayerJoin(ServerPlayer player) {
+        advancementCriteria.rebind(player);
+        engine.playerJoined(player);
         claims.retryPending(player, false);
         notifyDailyRotation(player);
         if (pendingResetNotifications.remove(player.getUUID())) {
@@ -97,16 +101,26 @@ public final class QuestManager {
         }
     }
 
+    public void onPlayerDisconnect(ServerPlayer player) {
+        advancementCriteria.disconnect(player);
+    }
+
+    /// Reattaches fake criteria after Minecraft rebuilds every player's advancement state.
+    public void onDataPackReload() {
+        server.getPlayerList().getPlayers().forEach(advancementCriteria::rebind);
+    }
+
     public void shutdown() {
         catalogSubscription.close();
         engine.close();
+        advancementCriteria.close();
         questChanges.clear();
         pendingResetNotifications.clear();
     }
 
     /// Returns the list of quests currently available to the given player.
-    public List<QuestModel.Occurrence> available(NameAndId player) {
-        return engine.available(player.id());
+    public List<QuestModel.Occurrence> available() {
+        return engine.available();
     }
 
     /// Returns the current attempt state for the given player and quest occurrence.
@@ -114,8 +128,8 @@ public final class QuestManager {
         return engine.attempt(player.id(), occurrence);
     }
 
-    public Optional<QuestModel.Occurrence> findOccurrence(NameAndId player, Identifier questId) {
-        return engine.findOccurrence(player.id(), questId);
+    public Optional<QuestModel.Occurrence> findOccurrence(Identifier questId) {
+        return engine.findOccurrence(questId);
     }
 
     /// Returns a reward profile from the currently active datapack catalog.
@@ -152,6 +166,28 @@ public final class QuestManager {
             }
         }
         if (update.diff().hasChanges() || rotationResult.assignmentChanged()) questChanges.changed();
+    }
+
+    /// Converts a fake vanilla advancement award into the corresponding quest signal.
+    public boolean interceptAdvancementCriterion(
+            ServerPlayer player,
+            AdvancementHolder holder,
+            String criterionName
+    ) {
+        var award = advancementCriteria.intercept(player, holder, criterionName);
+        award.registrationId().ifPresent(id -> signal(new QuestSignal.CriteriaMatched(player, server.getTickCount(), Set.of(id))));
+        return award.intercepted();
+    }
+
+    public void beginAdvancementCriterionBatch(ServerPlayer player) {
+        advancementCriteria.beginMatchBatch(player);
+    }
+
+    public void endAdvancementCriterionBatch(ServerPlayer player) {
+        var matches = advancementCriteria.endMatchBatch(player);
+        if (!matches.isEmpty()) {
+            signal(new QuestSignal.CriteriaMatched(player, server.getTickCount(), matches));
+        }
     }
 
     public boolean isClaimed(NameAndId player, QuestModel.Key key) {

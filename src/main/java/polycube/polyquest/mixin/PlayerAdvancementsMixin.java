@@ -11,11 +11,24 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import polycube.polyquest.runtime.QuestRuntime;
 import polycube.polyquest.signal.QuestSignal;
 
-/// Emits from vanilla's one-time incomplete-to-complete branch, after it grants rewards.
+/// Diverts fake quest criteria and emits completed real advancements.
 @Mixin(PlayerAdvancements.class)
 abstract class PlayerAdvancementsMixin {
     @Shadow
     private ServerPlayer player;
+
+    @Inject(method = "award", at = @At("HEAD"), cancellable = true)
+    private void polyquest$interceptQuestCriterion(
+            AdvancementHolder holder,
+            String criterion,
+            CallbackInfoReturnable<Boolean> callback
+    ) {
+        QuestRuntime.manager().ifPresent(manager -> {
+            if (manager.interceptAdvancementCriterion(player, holder, criterion)) {
+                callback.setReturnValue(true);
+            }
+        });
+    }
 
     @Inject(method = "award", at = @At(value = "INVOKE", target = "Lnet/minecraft/advancements/AdvancementRewards;grant(Lnet/minecraft/server/level/ServerPlayer;)V", shift = At.Shift.AFTER))
     private void polyquest$afterCompletionRewards(AdvancementHolder holder, String criterion, CallbackInfoReturnable<Boolean> callback) {

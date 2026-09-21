@@ -24,7 +24,7 @@ public final class QuestReloadListener extends SimpleReloadListener<DataResult<Q
     @Override
     protected DataResult<QuestModel.Catalog> prepare(PreparableReloadListener.SharedState state) {
         DynamicOps<JsonElement> ops = registries.createSerializationContext(JsonOps.INSTANCE);
-        return new QuestResourceCompiler().compile(state.resourceManager(), ops);
+        return new QuestResourceCompiler(registries).compile(state.resourceManager(), ops);
     }
 
     /// Publishes only complete candidates. A failed reload leaves the old catalog active.

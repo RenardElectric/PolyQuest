@@ -9,6 +9,7 @@ import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.resources.FileToIdConverter;
 import net.minecraft.resources.Identifier;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.ExtraCodecs;
@@ -49,7 +50,15 @@ final class QuestResourceCompiler {
             Codec.unboundedMap(Codec.STRING, ExtraCodecs.JSON).optionalFieldOf("arguments", Map.of()).forGetter(TemplateInvocation::arguments)
     ).apply(instance, TemplateInvocation::new));
 
-    private final QuestDefinitionValidator validator = new QuestDefinitionValidator();
+    private final QuestDefinitionValidator validator;
+
+    QuestResourceCompiler() {
+        validator = new QuestDefinitionValidator();
+    }
+
+    QuestResourceCompiler(HolderLookup.Provider registries) {
+        validator = new QuestDefinitionValidator(registries);
+    }
 
     /// Uses Mojang's effective resource view, then compiles one transactional catalog candidate.
     DataResult<QuestModel.Catalog> compile(ResourceManager manager, DynamicOps<JsonElement> ops) {

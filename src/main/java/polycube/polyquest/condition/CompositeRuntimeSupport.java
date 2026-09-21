@@ -49,6 +49,11 @@ final class CompositeRuntimeSupport {
         }
 
         @Override
+        public void close() {
+            children.forEach(ConditionRuntime.Instance::close);
+        }
+
+        @Override
         public JsonObject diagnostic() {
             JsonObject result = new JsonObject();
             result.addProperty("type", definition.type().id().toString());

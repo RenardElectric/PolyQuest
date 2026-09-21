@@ -1,6 +1,8 @@
 package polycube.polyquest.resource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonArray;
@@ -9,6 +11,7 @@ import com.mojang.serialization.JsonOps;
 import java.util.Map;
 import java.util.Objects;
 import net.minecraft.SharedConstants;
+import net.minecraft.advancements.triggers.CriteriaTriggers;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.BeforeAll;
@@ -24,6 +27,7 @@ final class QuestResourceCompilerTest {
     static void registerTestedTypes() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+        ConditionApi.register(BuiltInConditions.AdvancementCriterion.TYPE);
         ConditionApi.register(BuiltInConditions.ExplicitSignal.TYPE);
         RewardApi.register(BuiltInRewards.Experience.TYPE);
     }
@@ -149,5 +153,39 @@ final class QuestResourceCompilerTest {
         assertTrue(catalog.quests().containsKey(questId));
         QuestModel.Definition quest = Objects.requireNonNull(catalog.quests().get(questId));
         assertEquals("d9692ca68241ac0a62a547fc7bf268bf663727125fc8b6b78163d49bf81be9f8", quest.behaviorHash());
+    }
+
+    @Test
+    void compilesVanillaAdvancementCriterionThroughMinecraftCodec() {
+        Identifier questId = Identifier.fromNamespaceAndPath("test", "vanilla_criterion");
+        QuestResourceCompiler.ResourceSet resources = new QuestResourceCompiler.ResourceSet(
+                Map.of(questId, JsonParser.parseString("""
+                        {
+                          "availability": "unique",
+                          "title": "Vanilla criterion test",
+                          "icon": "minecraft:beacon",
+                          "condition": {
+                            "type": "polyquest:advancement_criterion",
+                            "trigger": "minecraft:tick",
+                            "conditions": {}
+                          },
+                          "rewards": {
+                            "rewards": [
+                              { "type": "polyquest:experience", "points": 1 }
+                            ]
+                          }
+                        }
+                        """)),
+                Map.of(),
+                Map.of());
+
+        QuestModel.Catalog catalog = new QuestResourceCompiler()
+                .compile(resources, JsonOps.INSTANCE)
+                .getOrThrow();
+
+        BuiltInConditions.AdvancementCriterion condition = assertInstanceOf(
+                BuiltInConditions.AdvancementCriterion.class,
+                Objects.requireNonNull(catalog.quests().get(questId)).condition());
+        assertSame(CriteriaTriggers.TICK, condition.criterion().trigger());
     }
 }

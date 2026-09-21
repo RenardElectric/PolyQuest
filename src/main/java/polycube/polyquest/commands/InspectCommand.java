@@ -57,7 +57,7 @@ public final class InspectCommand extends PolyCommand {
 
     private int inspect(CommandSourceStack source, Identifier id, NameAndId player) throws CommandSyntaxException {
         var manager = CommandResult.require(PolyQuestApi.manager());
-        QuestModel.Occurrence occurrence = CommandResult.require(PolyQuestApi.quest(player, id));
+        QuestModel.Occurrence occurrence = CommandResult.require(PolyQuestApi.quest(id));
         QuestModel.Definition quest = occurrence.definition();
         var display = QuestDisplay.format(manager, source.getServer(), player, occurrence);
 

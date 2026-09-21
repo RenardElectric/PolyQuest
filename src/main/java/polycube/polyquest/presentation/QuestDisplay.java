@@ -3,6 +3,7 @@ package polycube.polyquest.presentation;
 import com.google.gson.JsonObject;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
@@ -327,6 +328,7 @@ public final class QuestDisplay {
         var ops = manager.server().registryAccess().createSerializationContext(JsonOps.INSTANCE);
 
         return switch (condition) {
+            case BuiltInConditions.AdvancementCriterion value -> "Satisfy " + humanize(BuiltInRegistries.TRIGGER_TYPES.getKey(value.criterion().trigger())) + " criterion";
             case BuiltInConditions.ConsumeItems value -> "Turn in " + value.count() + "× " + itemTarget(value.item());
             case BuiltInConditions.FishItem value -> "Catch " + value.count() + "× " + itemTarget(value.item());
             case BuiltInConditions.KillEntity value ->

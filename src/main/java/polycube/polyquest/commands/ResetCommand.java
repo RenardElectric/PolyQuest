@@ -53,7 +53,7 @@ public final class ResetCommand extends PolyCommand {
 
     private static int reset(CommandSourceStack source, Identifier id, NameAndId player) throws CommandSyntaxException {
         var manager = CommandResult.require(PolyQuestApi.manager());
-        var occurrence = CommandResult.require(PolyQuestApi.quest(player, id));
+        var occurrence = CommandResult.require(PolyQuestApi.quest(id));
         var previousStatus = manager.attempt(player, occurrence).status();
         CommandResult.require(PolyQuestApi.reset(player, id));
 

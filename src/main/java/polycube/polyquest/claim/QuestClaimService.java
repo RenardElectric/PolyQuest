@@ -37,7 +37,7 @@ public final class QuestClaimService {
 
     /// Runs the normal claim transaction and checkpoints each stage for safe reward retries.
     public ClaimResult claim(ServerPlayer player, Identifier questId) {
-        Optional<QuestModel.Occurrence> occurrenceResult = engine.findOccurrence(player.getUUID(), questId);
+        Optional<QuestModel.Occurrence> occurrenceResult = engine.findOccurrence(questId);
         if (occurrenceResult.isEmpty()) return ClaimResult.failure("That quest is not currently available");
 
         QuestModel.Occurrence occurrence = occurrenceResult.get();
@@ -92,7 +92,7 @@ public final class QuestClaimService {
     /// Administrator path that grants configured rewards without objective costs.
     /// The normal durable transaction path is retained.
     public ClaimResult forceClaim(ServerPlayer player, Identifier questId) {
-        Optional<QuestModel.Occurrence> occurrenceResult = engine.findOccurrence(player.getUUID(), questId);
+        Optional<QuestModel.Occurrence> occurrenceResult = engine.findOccurrence(questId);
         if (occurrenceResult.isEmpty()) return ClaimResult.failure("That quest is not currently available");
 
         QuestModel.Occurrence occurrence = occurrenceResult.get();
@@ -127,7 +127,7 @@ public final class QuestClaimService {
             // No durable cost-commit marker exists. Cancel rather than risk granting a reward
             // for an operation that may never have consumed its inputs.
             ledger.cancel(transaction);
-            engine.findOccurrence(player.getUUID(), transaction.questId())
+            engine.findOccurrence(transaction.questId())
                     .flatMap(occurrence -> engine.existingAttempt(player.getUUID(), occurrence.key()))
                     .ifPresent(QuestAttempt::markActiveAfterFailedClaim);
             questChanged.run();
@@ -138,7 +138,7 @@ public final class QuestClaimService {
         }
         ClaimResult result = grantRemaining(transaction, player);
         if (result.state() == ClaimState.SUCCESS) {
-            engine.findOccurrence(player.getUUID(), transaction.questId())
+            engine.findOccurrence(transaction.questId())
                     .flatMap(occurrence -> engine.existingAttempt(player.getUUID(), occurrence.key()))
                     .ifPresent(QuestAttempt::markClaimed);
         }

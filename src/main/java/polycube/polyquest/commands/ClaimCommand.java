@@ -57,7 +57,7 @@ public final class ClaimCommand extends PolyCommand {
 
     private static int claim(CommandSourceStack source, Identifier id, ServerPlayer player) throws CommandSyntaxException {
         var manager = CommandResult.require(PolyQuestApi.manager());
-        var occurrence = manager.findOccurrence(player.nameAndId(), id);
+        var occurrence = manager.findOccurrence(id);
         var result = CommandResult.require(PolyQuestApi.claim(player, id));
         var quest = occurrence.map(value -> {
             var status = manager.attempt(player.nameAndId(), value).status();

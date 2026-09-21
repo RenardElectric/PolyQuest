@@ -51,6 +51,7 @@ final class FlowCompositeRuntime {
             completedIterations++;
             boolean done = completed();
             if (!done) {
+                child.close();
                 child = ConditionRuntime.create(definition.child(), creationContext);
             }
             return new ConditionRuntime.Update(true, true, done);
@@ -80,7 +81,13 @@ final class FlowCompositeRuntime {
         @Override
         public void reset() {
             completedIterations = 0;
+            child.close();
             child = ConditionRuntime.create(definition.child(), creationContext);
+        }
+
+        @Override
+        public void close() {
+            child.close();
         }
 
         @Override
@@ -318,6 +325,12 @@ final class FlowCompositeRuntime {
                     : -1L;
             attempts = 0;
             exhausted = false;
+        }
+
+        @Override
+        public void close() {
+            child.close();
+            startCondition.ifPresent(ConditionRuntime.Instance::close);
         }
 
         @Override

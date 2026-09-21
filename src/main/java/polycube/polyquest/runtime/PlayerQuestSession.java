@@ -8,16 +8,24 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Predicate;
 
 /// In-memory, restart-discarded quest attempts for one player UUID.
 public final class PlayerQuestSession {
+    private final UUID playerId;
+    private final ConditionRuntime.CriterionRegistrar criteria;
     private final Map<QuestModel.Key, QuestAttempt> attempts = new LinkedHashMap<>();
+
+    public PlayerQuestSession(UUID playerId, ConditionRuntime.CriterionRegistrar criteria) {
+        this.playerId = playerId;
+        this.criteria = criteria;
+    }
 
     public QuestAttempt getOrCreate(QuestModel.Occurrence occurrence, MinecraftServer server) {
         return attempts.computeIfAbsent(
                 occurrence.key(),
-                ignored -> new QuestAttempt(occurrence, server));
+                ignored -> new QuestAttempt(playerId, occurrence, server, criteria));
     }
 
     public Optional<QuestAttempt> get(QuestModel.Key key) {
@@ -35,6 +43,7 @@ public final class PlayerQuestSession {
             if (!predicate.test(attempt)) {
                 return false;
             }
+            attempt.close();
             removed.add(attempt);
             return true;
         });
@@ -42,7 +51,12 @@ public final class PlayerQuestSession {
     }
 
     public boolean removeOccurrence(QuestModel.Key key) {
-        return attempts.remove(key) != null;
+        QuestAttempt removed = attempts.remove(key);
+        if (removed == null) {
+            return false;
+        }
+        removed.close();
+        return true;
     }
 
     /// Rebinds retained attempts to the catalog's current definition and availability data.
@@ -51,5 +65,10 @@ public final class PlayerQuestSession {
             Optional.ofNullable(occurrences.get(attempt.occurrence().key()))
                     .ifPresent(attempt::updateOccurrence);
         }
+    }
+
+    public void close() {
+        attempts.values().forEach(QuestAttempt::close);
+        attempts.clear();
     }
 }

@@ -22,6 +22,11 @@ public final class FabricQuestEvents {
     public static void register() {
         ServerLifecycleEvents.SERVER_STARTED.register(QuestRuntime::start);
         ServerLifecycleEvents.SERVER_STOPPING.register(QuestRuntime::stop);
+        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resources, success) -> {
+            if (success) {
+                QuestRuntime.ifPresent(QuestManager::onDataPackReload);
+            }
+        });
         ServerTickEvents.END_SERVER_TICK.register(_ -> QuestRuntime.ifPresent(QuestManager::tick));
 
         ServerEntityCombatEvents.AFTER_KILLED_OTHER_ENTITY.register((level, killer, victim, damageSource) -> {
@@ -61,6 +66,7 @@ public final class FabricQuestEvents {
                 QuestRuntime.ifPresent(manager -> manager.onPlayerJoin(handler.getPlayer())));
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             breakTools.remove(handler.getPlayer().getUUID());
+            QuestRuntime.ifPresent(manager -> manager.onPlayerDisconnect(handler.getPlayer()));
         });
     }
 

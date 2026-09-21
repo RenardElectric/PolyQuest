@@ -5,6 +5,8 @@ import net.minecraft.server.MinecraftServer;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.signal.QuestSignal;
 
+import java.util.UUID;
+
 /// Mutable progress for one player and one quest occurrence.
 public final class QuestAttempt {
     private QuestModel.Occurrence occurrence;
@@ -14,9 +16,14 @@ public final class QuestAttempt {
     private long lastUpdatedTick;
     private boolean progressed;
 
-    public QuestAttempt(QuestModel.Occurrence occurrence, MinecraftServer server) {
+    public QuestAttempt(
+            UUID playerId, QuestModel.Occurrence occurrence,
+            MinecraftServer server, ConditionRuntime.CriterionRegistrar criteria
+    ) {
         this.occurrence = occurrence;
-        this.root = ConditionRuntime.create(occurrence.definition().condition(), new ConditionRuntime.CreationContext(server::getTickCount));
+        this.root = ConditionRuntime.create(
+                occurrence.definition().condition(),
+                new ConditionRuntime.CreationContext(server::getTickCount, playerId, criteria));
         this.createdAtTick = server.getTickCount();
         this.lastUpdatedTick = createdAtTick;
         refreshStatus();
@@ -81,10 +88,12 @@ public final class QuestAttempt {
 
     public void markPending() {
         status = QuestModel.AttemptStatus.CLAIM_PENDING;
+        root.close();
     }
 
     public void markClaimed() {
         status = QuestModel.AttemptStatus.CLAIMED;
+        root.close();
     }
 
     /// Re-derives readiness after claim compensation instead of blindly forcing an active state.
@@ -109,6 +118,10 @@ public final class QuestAttempt {
         return progressed || status != QuestModel.AttemptStatus.ACTIVE;
     }
 
+    public void close() {
+        root.close();
+    }
+
     private boolean terminal() {
         return status == QuestModel.AttemptStatus.CLAIMED
                 || status == QuestModel.AttemptStatus.CLAIM_PENDING
@@ -122,8 +135,10 @@ public final class QuestAttempt {
         }
         if (root.exhausted()) {
             status = QuestModel.AttemptStatus.EXHAUSTED;
+            root.close();
         } else if (root.completed()) {
             status = QuestModel.AttemptStatus.READY_TO_CLAIM;
+            root.close();
         } else {
             status = QuestModel.AttemptStatus.ACTIVE;
         }

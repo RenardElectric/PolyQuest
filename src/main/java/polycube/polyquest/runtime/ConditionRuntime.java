@@ -1,19 +1,34 @@
 package polycube.polyquest.runtime;
 
 import com.google.gson.JsonObject;
+import net.minecraft.advancements.triggers.Criterion;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import polycube.polyquest.condition.ConditionApi;
 import polycube.polyquest.signal.QuestSignal;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.function.LongSupplier;
 
 /// Mutable per-player condition state and claim-time operations.
 public final class ConditionRuntime {
-    public record CreationContext(LongSupplier serverTick) {
+    public record CreationContext(
+            LongSupplier serverTick,
+            UUID playerId,
+            CriterionRegistrar criteria
+    ) {
+        public CreationContext(LongSupplier serverTick) {
+            this(serverTick, new UUID(0L, 0L), CriterionRegistrar.NONE);
+        }
+
         public long currentServerTick() {
             return serverTick.getAsLong();
+        }
+
+        public CriterionRegistration register(Criterion<?> criterion) {
+            return criteria.register(playerId, criterion);
         }
     }
 
@@ -63,6 +78,9 @@ public final class ConditionRuntime {
         /// Resets the instance state to its initial state, allowing it to be reused.
         void reset();
 
+        /// Releases external listeners owned by this runtime subtree.
+        default void close() {}
+
         /// Returns a diagnostic JSON object representing the current state of the instance.
         default JsonObject diagnostic() {
             JsonObject result = new JsonObject();
@@ -70,6 +88,44 @@ public final class ConditionRuntime {
             result.addProperty("type", definition().type().id().toString());
             return result;
         }
+    }
+
+    /// Registration seam between condition trees and Minecraft advancement criteria.
+    @FunctionalInterface
+    public interface CriterionRegistrar {
+        CriterionRegistrar NONE = (_, _) -> CriterionRegistration.NONE;
+
+        CriterionRegistration register(UUID playerId, Criterion<?> criterion);
+    }
+
+    /// Controls one fake advancement criterion listener without exposing tracker internals.
+    public interface CriterionRegistration extends AutoCloseable {
+        CriterionRegistration NONE = new CriterionRegistration() {
+            private static final Identifier ID = Identifier.fromNamespaceAndPath("polyquest", "runtime/unbound");
+
+            @Override
+            public Identifier id() {
+                return ID;
+            }
+
+            @Override
+            public void activate() {}
+
+            @Override
+            public void deactivate() {}
+
+            @Override
+            public void close() {}
+        };
+
+        Identifier id();
+
+        void activate();
+
+        void deactivate();
+
+        @Override
+        void close();
     }
 
     public record ClaimPreparation(boolean ready, List<ClaimOperation> operations, String failure) {

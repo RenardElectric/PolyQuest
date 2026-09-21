@@ -35,7 +35,7 @@ public final class QuestJournalGui extends QuestGui {
     public void refresh() {
         renderBackground();
 
-        var dailyQuests = manager.available(player.nameAndId()).stream()
+        var dailyQuests = manager.available().stream()
                 .filter(quest -> quest.definition().availability() == QuestModel.Availability.DAILY)
                 .sorted(DAILY_QUEST_ORDER)
                 .toList();

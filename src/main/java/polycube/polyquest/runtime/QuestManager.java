@@ -55,18 +55,13 @@ public final class QuestManager {
         return questChanges.addListener(listener);
     }
 
-    /// Runs rotation checks, timed conditions, player-tick signals, and scheduled reward retries.
+    /// Runs rotation checks, timed conditions, and scheduled reward retries.
     public void tick() {
         long tick = server.getTickCount();
-        boolean changed = false;
         if (tick % 20L == 0L) {
-            changed |= refreshRotationAndEngine();
+            refreshRotationAndEngine();
         }
-        changed |= engine.tick(tick);
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            changed |= engine.onSignal(new QuestSignal.PlayerTick(player, tick));
-        }
-        if (changed) questChanges.changed();
+        if (engine.tick(tick)) questChanges.changed();
         if (tick >= nextRewardRetryTick) {
             nextRewardRetryTick = tick + config.pendingRewardRetrySeconds() * 20L;
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
@@ -92,6 +87,7 @@ public final class QuestManager {
     }
 
     public void onPlayerJoin(ServerPlayer player) {
+        refreshRotationAndEngine();
         advancementCriteria.rebind(player);
         engine.playerJoined(player);
         claims.retryPending(player, false);
@@ -142,10 +138,12 @@ public final class QuestManager {
     }
 
     public QuestClaimService.ClaimResult claim(ServerPlayer player, Identifier questId) {
+        refreshRotationAndEngine();
         return claims.claim(player, questId);
     }
 
     public QuestClaimService.ClaimResult forceClaim(ServerPlayer player, Identifier questId) {
+        refreshRotationAndEngine();
         return claims.forceClaim(player, questId);
     }
 
@@ -203,13 +201,12 @@ public final class QuestManager {
         return result;
     }
 
-    private boolean refreshRotationAndEngine() {
+    private void refreshRotationAndEngine() {
         var result = refreshRotation();
         if (result.assignmentChanged()) {
             engine.rotationChanged();
-            pendingResetNotifications.clear();
+            questChanges.changed();
         }
-        return result.assignmentChanged();
     }
 
     private void notifyDailyRotation(ServerPlayer player) {

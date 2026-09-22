@@ -16,8 +16,8 @@ import polycube.polycore.commands.PolyCommand;
 import polycube.polycore.text.TextComponents;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
-import polycube.polyquest.commands.commandArguments.QuestArgument;
 import polycube.polyquest.model.QuestModel;
+import polycube.polyquest.presentation.ConditionText;
 import polycube.polyquest.presentation.QuestDisplay;
 
 import java.util.Collection;
@@ -79,8 +79,9 @@ public final class InspectCommand extends PolyCommand {
                         TextComponents.copy("[Copy key]", occurrence.key().persistentKey())))
                 .append(TextComponents.field("Ledger claimed", TextComponents.yesNo(display.claimed())))
                 .append(TextComponents.field(
-                        "Condition type",
-                        TextComponents.value(quest.condition().type().id())))
+                        "Objective",
+                        TextComponents.hover(ConditionText.summary(source.getServer(), quest.condition()),
+                                TextComponents.muted("Condition type: " + quest.condition().type().id()))))
                 .append(TextComponents.field(
                         "Available from",
                         TextComponents.value(occurrence.availableFrom())))

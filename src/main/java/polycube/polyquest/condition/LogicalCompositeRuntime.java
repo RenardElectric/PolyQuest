@@ -11,7 +11,7 @@ import java.util.function.Function;
 
 /// Concurrent, threshold, optional, and branching composite runtime nodes.
 final class LogicalCompositeRuntime {
-    /// A composite condition that is satisfied when any child is satisfied.
+    /// A composite condition that is satisfied when every child is satisfied.
     static final class AllOfInstance extends CompositeRuntimeSupport.ChildrenInstance<CompositeConditions.AllOf> {
         AllOfInstance(CompositeConditions.AllOf definition, ConditionRuntime.CreationContext context) {
             super(definition, definition.children(), context);

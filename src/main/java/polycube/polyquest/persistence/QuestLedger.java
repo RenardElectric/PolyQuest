@@ -61,6 +61,7 @@ public final class QuestLedger extends SavedData {
 
     private final Map<UUID, Set<String>> claims = new HashMap<>();
     private final Map<UUID, PendingTransaction> pending = new LinkedHashMap<>();
+    private final Map<UUID, List<PendingTransaction>> pendingByPlayer = new HashMap<>();
     private final EnumMap<QuestModel.Difficulty, Integer> rotationGenerations = new EnumMap<>(QuestModel.Difficulty.class);
     private final Set<UUID> rotationNotifiedPlayers = new HashSet<>();
     private LocalDate rotationDate = LocalDate.MIN;
@@ -81,7 +82,7 @@ public final class QuestLedger extends SavedData {
         this.rotationGenerations.putAll(rotationGenerations);
         this.rotationNotifiedPlayers.addAll(rotationNotifiedPlayers);
         claims.forEach((playerId, values) -> this.claims.put(playerId, new HashSet<>(values)));
-        pendingTransactions.forEach(transaction -> pending.put(transaction.id(), transaction));
+        pendingTransactions.forEach(this::putPending);
     }
 
     public static QuestLedger load(MinecraftServer server) {
@@ -99,7 +100,7 @@ public final class QuestLedger extends SavedData {
                 occurrence.key().persistentKey(), List.copyOf(rewards),
                 0, TransactionState.PREPARED, ""
         );
-        pending.put(transaction.id(), transaction);
+        putPending(transaction);
         setDirty();
         return transaction;
     }
@@ -129,27 +130,51 @@ public final class QuestLedger extends SavedData {
     }
 
     public void cancel(PendingTransaction transaction) {
-        pending.remove(transaction.id());
-        setDirty();
+        var removed = pending.remove(transaction.id());
+        if (removed != null) {
+            unindexPending(removed);
+            setDirty();
+        }
     }
 
     public void complete(PendingTransaction transaction) {
-        claims.computeIfAbsent(transaction.playerId(), ignored -> new HashSet<>()).add(transaction.occurrenceKey());
-        pending.remove(transaction.id());
+        var removed = pending.remove(transaction.id());
+        if (removed == null) return;
+        claims.computeIfAbsent(removed.playerId(), ignored -> new HashSet<>()).add(removed.occurrenceKey());
+        unindexPending(removed);
         setDirty();
     }
 
     public List<PendingTransaction> pendingFor(UUID playerId) {
-        return pending.values().stream()
-                .filter(transaction -> transaction.playerId().equals(playerId))
-                .toList();
+        return List.copyOf(pendingByPlayer.getOrDefault(playerId, List.of()));
     }
 
     public boolean hasPending(UUID playerId, QuestModel.Key occurrence) {
-        String occurrenceKey = occurrence.persistentKey();
-        return pending.values().stream().anyMatch(transaction ->
-                transaction.playerId().equals(playerId)
-                        && transaction.occurrenceKey().equals(occurrenceKey));
+        return findPending(playerId, occurrence).isPresent();
+    }
+
+    public Optional<PendingTransaction> findPending(UUID playerId, QuestModel.Key occurrence) {
+        var occurrenceKey = occurrence.persistentKey();
+        return pendingByPlayer.getOrDefault(playerId, List.of()).stream()
+                .filter(transaction -> transaction.occurrenceKey().equals(occurrenceKey))
+                .findFirst();
+    }
+
+    /// Keeps the persisted transaction order and the player lookup index in sync.
+    private void putPending(PendingTransaction transaction) {
+        var replaced = pending.put(transaction.id(), transaction);
+        if (replaced != null) unindexPending(replaced);
+        pendingByPlayer.computeIfAbsent(transaction.playerId(), ignored -> new ArrayList<>()).add(transaction);
+    }
+
+    private void unindexPending(PendingTransaction transaction) {
+        var playerTransactions = pendingByPlayer.get(transaction.playerId());
+        if (playerTransactions != null) {
+            playerTransactions.remove(transaction);
+            if (playerTransactions.isEmpty()) {
+                pendingByPlayer.remove(transaction.playerId());
+            }
+        }
     }
 
     public List<PendingTransaction> pendingTransactions() {

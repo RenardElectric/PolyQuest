@@ -15,7 +15,6 @@ import polycube.polycore.text.TextComponents;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.claim.QuestClaimService;
-import polycube.polyquest.commands.commandArguments.QuestArgument;
 import polycube.polyquest.model.QuestModel;
 
 import java.util.Collection;
@@ -57,11 +56,11 @@ public final class ClaimCommand extends PolyCommand {
 
     private static int claim(CommandSourceStack source, Identifier id, ServerPlayer player) throws CommandSyntaxException {
         var manager = CommandResult.require(PolyQuestApi.manager());
-        var occurrence = manager.findOccurrence(id);
         var result = CommandResult.require(PolyQuestApi.claim(player, id));
+        var occurrence = manager.findOccurrence(id);
         var quest = occurrence.map(value -> {
             var status = manager.attempt(player.nameAndId(), value).status();
-            return QuestCommandText.quest(value, status, player.nameAndId());
+            return QuestCommandText.quest(source.getServer(), value, status, player.nameAndId());
         }).orElseGet(() -> TextComponents.copy(id.toString(), id.toString()));
 
         if (result.successful()) {

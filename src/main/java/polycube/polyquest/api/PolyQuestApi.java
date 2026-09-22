@@ -3,12 +3,13 @@ package polycube.polyquest.api;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.mojang.serialization.DataResult;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
 import polycube.polyquest.claim.QuestClaimService;
+import polycube.polyquest.condition.ConditionApi;
 import polycube.polyquest.model.QuestModel;
-import polycube.polyquest.reward.RewardApi;
 import polycube.polyquest.runtime.QuestManager;
 import polycube.polyquest.runtime.QuestRuntime;
 import polycube.polyquest.signal.QuestSignal;
@@ -19,14 +20,14 @@ import java.util.List;
 public final class PolyQuestApi {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    /// Returns the server's Common Economy API adapter, if installed.
+    /// Returns the active server's quest manager, if initialized.
     public static DataResult<QuestManager> manager() {
         return QuestRuntime.manager()
                 .map(DataResult::success)
                 .orElse(DataResult.error(() -> "PolyQuest runtime is not ready"));
     }
 
-    /// Returns the quest occurrence for the given player and quest ID, if the quest manager is installed.
+    /// Returns the currently available occurrence for a quest ID.
     public static DataResult<QuestModel.Occurrence> quest(Identifier questId) {
         return manager().flatMap(
                 manager ->
@@ -35,7 +36,7 @@ public final class PolyQuestApi {
         );
     }
 
-    /// Returns the list of quests available to the given player, if the quest manager is installed.
+    /// Returns the globally available daily and unique quest occurrences.
     public static DataResult<List<QuestModel.Occurrence>> availableQuests() {
         return manager().map(QuestManager::available);
     }
@@ -63,20 +64,25 @@ public final class PolyQuestApi {
         );
     }
 
-    /// Retries any pending reward transactions for the given player, if the quest manager is installed.
+    /// Claims a quest or retries that quest's pending reward transaction.
     public static DataResult<QuestClaimService.ClaimResult> claim(ServerPlayer player, Identifier questId) {
         return manager().map(manager -> manager.claim(player, questId));
     }
 
-    /// Returns a JSON string representing the diagnostic state of the given player's quest attempt, if the quest manager is installed.
+    /// Returns both live progress and the decoded condition definition, including criterion predicates.
     public static DataResult<String> inspect(NameAndId player, Identifier questId) {
-        return manager().flatMap(
-                manager ->
-                        quest(questId).map(oc -> {
-                            var attempt = manager.attempt(player, oc);
-                            return GSON.toJson(attempt.diagnostic());
-                        })
-        );
+        return manager().flatMap(manager -> quest(questId).map(oc -> {
+            var diagnostic = manager.attempt(player, oc).diagnostic();
+            diagnostic.addProperty("quest_title", oc.definition().title());
+            var encoded = ConditionApi.codec().encodeStart(
+                    manager.server().registryAccess().createSerializationContext(JsonOps.INSTANCE),
+                    oc.definition().condition());
+            encoded.result().ifPresentOrElse(
+                    definition -> diagnostic.add("condition_definition", definition),
+                    () -> diagnostic.addProperty("condition_definition_error",
+                            encoded.error().map(DataResult.Error::message).orElse("Could not encode condition definition")));
+            return GSON.toJson(diagnostic);
+        }));
     }
 
     private PolyQuestApi() {}

@@ -4,11 +4,13 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.NameAndId;
 import org.jspecify.annotations.Nullable;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.model.QuestModel;
+import polycube.polyquest.presentation.ConditionText;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -24,11 +26,11 @@ public final class QuestCommandText {
         return copy(quest.title(), quest.id().toString());
     }
 
-    public static MutableComponent quest(QuestModel.Occurrence occurrence, QuestModel.AttemptStatus status, @Nullable NameAndId player) {
+    public static MutableComponent quest(MinecraftServer server, QuestModel.Occurrence occurrence, QuestModel.AttemptStatus status, @Nullable NameAndId player) {
         return action(
                 occurrence.definition().title(),
                 "/" + PolyQuest.MOD_ID + " inspect " + occurrence.definition().id() + (player != null ? " " + player.name() : " "),
-                questTooltip(occurrence, status).append("\n").append(muted("Click to inspect."))
+                questTooltip(server, occurrence, status).append("\n").append(muted("Click to inspect."))
         );
     }
 
@@ -140,12 +142,13 @@ public final class QuestCommandText {
     public static MutableComponent diagnostics(Identifier id, NameAndId player) {
         var diagnostic = PolyQuestApi.inspect(player, id);
         if (diagnostic.error().isPresent()) {
-            return hover(Component.literal("[Diagnostics]"), error("Failed to retrieve diagnostics for quest " + id + " for player " + player.name() + ": " + diagnostic.error().get()));
+            return hover(Component.literal("[Copy diagnostics]"), error("Failed to retrieve diagnostics for quest " + id + " for player " + player.name() + ": " + diagnostic.error().get()));
         }
-        return copy("[Diagnostics]", diagnostic.getOrThrow());
+        return copy("[Copy diagnostics]", diagnostic.getOrThrow());
     }
 
     private static MutableComponent questTooltip(
+            MinecraftServer server,
             QuestModel.Occurrence occurrence,
             QuestModel.AttemptStatus status
     ) {
@@ -161,7 +164,7 @@ public final class QuestCommandText {
         tooltip.append(field("Status", status(status)))
                 .append(field("Availability", value(availability(quest))))
                 .append(field("Time", value(expiry(occurrence))))
-                .append(field("Objective", value(quest.condition().type().id().toString())))
+                .append(field("Objective", ConditionText.summary(server, quest.condition())))
                 .append(field("Rewards", value(rewards(quest))));
         return tooltip;
     }

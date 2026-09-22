@@ -15,8 +15,11 @@ import polycube.polyquest.integration.LootSignals;
 /// Observes the final `spawnAtLocation` overload used by vanilla entity drops.
 @Mixin(Entity.class)
 abstract class EntityItemDropMixin {
-    @Inject(method = "spawnAtLocation(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/entity/item/ItemEntity;", at = @At("HEAD"))
+    @Inject(method = "spawnAtLocation(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/entity/item/ItemEntity;", at = @At("RETURN"))
     private void polyquest$captureDeathDrop(ServerLevel level, ItemStack itemStack, Vec3 offset, CallbackInfoReturnable<@Nullable ItemEntity> callback) {
-        LootSignals.captureEntityLoot((Entity) (Object) this, itemStack);
+        var spawned = callback.getReturnValue();
+        if (spawned != null) {
+            LootSignals.captureEntityLoot((Entity) (Object) this, spawned.getItem());
+        }
     }
 }

@@ -1,4 +1,4 @@
-package polycube.polyquest.commands.commandArguments;
+package polycube.polyquest.commands;
 
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
@@ -8,9 +8,9 @@ import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.resources.Identifier;
 import polycube.polyquest.api.PolyQuestApi;
 
-public class QuestArgument {
-    /// Creates a Minecraft identifier argument suggested from the player's current occurrences.
-    public static RequiredArgumentBuilder<CommandSourceStack, Identifier> questArgument(String argumentName) {
+final class QuestArgument {
+    /// Creates an identifier argument suggested from the current global occurrences.
+    static RequiredArgumentBuilder<CommandSourceStack, Identifier> questArgument(String argumentName) {
         return Commands.argument(argumentName, IdentifierArgument.id())
                 .suggests((_, builder) ->
                         PolyQuestApi.availableQuests().result()
@@ -20,4 +20,6 @@ public class QuestArgument {
                                         builder))
                                 .orElseGet(builder::buildFuture));
     }
+
+    private QuestArgument() {}
 }

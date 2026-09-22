@@ -107,10 +107,13 @@ final class QuestResourceCompiler {
             behavior.remove("title");
             behavior.remove("description");
             behavior.remove("icon");
+            stripRewardPresentation(behavior.get("rewards"));
             body.rewards().profile().ifPresent(profileId -> {
                 JsonElement profileJson = resources.rewardProfiles().get(profileId);
                 if (profileJson != null) {
-                    behavior.add("_resolved_reward_profile", profileJson.deepCopy());
+                    JsonElement functionalProfile = profileJson.deepCopy();
+                    stripRewardPresentation(functionalProfile);
+                    behavior.add("_resolved_reward_profile", functionalProfile);
                 }
             });
 
@@ -290,6 +293,25 @@ final class QuestResourceCompiler {
 
     private static String hash(JsonElement element) {
         return Hashing.sha256().hashString(GsonHelper.toStableString(element), StandardCharsets.UTF_8).toString();
+    }
+
+    /// Excludes built-in reward labels that affect only presentation, not delivery.
+    private static void stripRewardPresentation(@Nullable JsonElement rewards) {
+        if (rewards == null || !rewards.isJsonObject()) return;
+        JsonElement values = rewards.getAsJsonObject().get("rewards");
+        if (values == null || !values.isJsonArray()) return;
+        for (JsonElement value : values.getAsJsonArray()) {
+            if (!value.isJsonObject()) continue;
+            JsonObject reward = value.getAsJsonObject();
+            JsonElement type = reward.get("type");
+            if (type == null || !type.isJsonPrimitive()) continue;
+            switch (type.getAsString()) {
+                case "polyquest:money" -> reward.remove("formatted_amount");
+                case "polyquest:commands" -> reward.remove("title");
+                default -> {
+                }
+            }
+        }
     }
 
     record ResourceSet(

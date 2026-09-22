@@ -27,7 +27,7 @@ final class AdvancementCriterionTracker implements ConditionRuntime.CriterionReg
     private final MinecraftServer server;
     private final Map<Identifier, Entry> entries = new HashMap<>();
     private final Map<UUID, Set<Entry>> entriesByPlayer = new HashMap<>();
-    private final Map<UUID, MatchBatch> matchBatches = new HashMap<>();
+    private final CriterionMatchBatches matchBatches = new CriterionMatchBatches();
     private long nextRegistrationId;
 
     AdvancementCriterionTracker(MinecraftServer server) {
@@ -57,7 +57,7 @@ final class AdvancementCriterionTracker implements ConditionRuntime.CriterionReg
         for (var entry : List.copyOf(entriesByPlayer.getOrDefault(player.getUUID(), Set.of()))) {
             entry.unbind();
         }
-        matchBatches.remove(player.getUUID());
+        matchBatches.discard(player.getUUID());
     }
 
     /// Groups the fake awards produced by one vanilla trigger evaluation.
@@ -66,23 +66,11 @@ final class AdvancementCriterionTracker implements ConditionRuntime.CriterionReg
         if (!entriesByPlayer.containsKey(playerId)) {
             return;
         }
-        var batch = matchBatches.computeIfAbsent(playerId, _ -> new MatchBatch());
-        batch.matches.clear();
-        batch.active = true;
+        matchBatches.begin(playerId);
     }
 
     Set<Identifier> endMatchBatch(ServerPlayer player) {
-        var batch = matchBatches.get(player.getUUID());
-        if (batch == null || !batch.active) {
-            return Set.of();
-        }
-        batch.active = false;
-        if (batch.matches.isEmpty()) {
-            return Set.of();
-        }
-        var matches = Set.copyOf(batch.matches);
-        batch.matches.clear();
-        return matches;
+        return matchBatches.end(player.getUUID());
     }
 
     /// Identifies a fake award and returns its signal token when the registration is active.
@@ -99,9 +87,7 @@ final class AdvancementCriterionTracker implements ConditionRuntime.CriterionReg
                 || !entry.enabled) {
             return Award.INTERCEPTED;
         }
-        var batch = matchBatches.get(player.getUUID());
-        if (batch != null && batch.active) {
-            batch.matches.add(entry.id);
+        if (matchBatches.add(player.getUUID(), entry.id)) {
             return Award.INTERCEPTED;
         }
         return new Award(true, Optional.of(entry.id));
@@ -136,11 +122,6 @@ final class AdvancementCriterionTracker implements ConditionRuntime.CriterionReg
     record Award(boolean intercepted, Optional<Identifier> registrationId) {
         private static final Award PASS = new Award(false, Optional.empty());
         private static final Award INTERCEPTED = new Award(true, Optional.empty());
-    }
-
-    private static final class MatchBatch {
-        private final Set<Identifier> matches = new LinkedHashSet<>();
-        private boolean active;
     }
 
     private final class Entry implements ConditionRuntime.CriterionRegistration {
@@ -216,9 +197,8 @@ final class AdvancementCriterionTracker implements ConditionRuntime.CriterionReg
                 playerEntries.remove(this);
                 if (playerEntries.isEmpty()) {
                     entriesByPlayer.remove(playerId);
-                    var batch = matchBatches.get(playerId);
-                    if (batch == null || !batch.active) {
-                        matchBatches.remove(playerId);
+                    if (!matchBatches.isActive(playerId)) {
+                        matchBatches.discard(playerId);
                     }
                 }
             }

@@ -37,21 +37,17 @@ public final class QuestEngine implements AutoCloseable {
         rebuildAvailableOccurrences();
     }
 
-    /// Fans a player signal into every available, unclaimed occurrence, creating attempts lazily.
+    /// Routes a signal through the player's reconciled attempts, materializing them if it arrives before join setup.
     boolean onSignal(QuestSignal signal) {
         var playerId = signal.player().getUUID();
         var session = sessions.get(playerId);
+        if (session == null) {
+            playerJoined(signal.player());
+            session = sessions.get(playerId);
+        }
         boolean changed = false;
-        for (QuestModel.Occurrence occurrence : available()) {
-            if (ledger.isClaimed(playerId, occurrence.key())
-                    || ledger.hasPending(playerId, occurrence.key())) {
-                continue;
-            }
-            if (session == null) {
-                session = new PlayerQuestSession(playerId, criteria);
-                sessions.put(playerId, session);
-            }
-            changed |= session.getOrCreate(occurrence, server).onSignal(signal, server).changed();
+        for (QuestAttempt attempt : session.attempts()) {
+            changed |= attempt.onSignal(signal, server).changed();
         }
         return changed;
     }
@@ -112,7 +108,15 @@ public final class QuestEngine implements AutoCloseable {
         boolean attemptRemoved = Optional.ofNullable(sessions.get(playerId))
                 .map(session -> session.removeOccurrence(occurrence.key()))
                 .orElse(false);
-        return ledger.resetClaim(playerId, occurrence.key()) || attemptRemoved;
+        boolean changed = ledger.resetClaim(playerId, occurrence.key()) || attemptRemoved;
+        if (changed) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+            if (player != null) {
+                // A reset quest needs its fake criteria listening before the next gameplay event.
+                playerJoined(player);
+            }
+        }
+        return changed;
     }
 
     /// Materializes current attempts so vanilla triggers are listening before gameplay events fire.
@@ -133,9 +137,9 @@ public final class QuestEngine implements AutoCloseable {
         for (QuestModel.Occurrence occurrence : availableOccurrences) {
             currentOccurrences.put(occurrence.key(), occurrence);
         }
-        Set<QuestModel.Key> currentKeys = currentOccurrences.keySet();
-        Set<Identifier> behaviorChanged = update.diff().behaviorChanged();
-        List<UUID> resets = new ArrayList<>();
+        var currentKeys = currentOccurrences.keySet();
+        var behaviorChanged = update.diff().behaviorChanged();
+        Set<UUID> resets = new LinkedHashSet<>();
 
         for (Map.Entry<UUID, PlayerQuestSession> entry : sessions.entrySet()) {
             UUID playerId = entry.getKey();

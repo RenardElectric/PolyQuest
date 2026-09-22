@@ -43,9 +43,7 @@ public final class QuestClaimService {
         QuestModel.Occurrence occurrence = occurrenceResult.get();
         if (ledger.isClaimed(player.getUUID(), occurrence.key())) return ClaimResult.failure("You have already claimed this quest");
 
-        Optional<QuestLedger.PendingTransaction> existing = ledger.pendingFor(player.getUUID()).stream()
-                .filter(transaction -> transaction.occurrenceKey().equals(occurrence.key().persistentKey()))
-                .findFirst();
+        Optional<QuestLedger.PendingTransaction> existing = ledger.findPending(player.getUUID(), occurrence.key());
         if (existing.isPresent()) return retry(existing.get(), player);
 
         QuestAttempt attempt = engine.attempt(player.getUUID(), occurrence);
@@ -98,9 +96,7 @@ public final class QuestClaimService {
         QuestModel.Occurrence occurrence = occurrenceResult.get();
         if (ledger.isClaimed(player.getUUID(), occurrence.key())) return ClaimResult.failure("Quest has already been claimed");
 
-        Optional<QuestLedger.PendingTransaction> existing = ledger.pendingFor(player.getUUID()).stream()
-                .filter(transaction -> transaction.occurrenceKey().equals(occurrence.key().persistentKey()))
-                .findFirst();
+        Optional<QuestLedger.PendingTransaction> existing = ledger.findPending(player.getUUID(), occurrence.key());
         if (existing.isPresent()) return retry(existing.get(), player);
 
         List<RewardApi.Definition> rewards = resolveRewards(occurrence.definition());
@@ -113,6 +109,10 @@ public final class QuestClaimService {
         ClaimResult result = grantRemaining(transaction, player);
         if (result.state() == ClaimState.SUCCESS) {
             attempt.markClaimed();
+        } else if (result.state() == ClaimState.PERMANENT_FAILURE && transaction.nextReward() == 0) {
+            // No objective cost or reward was committed, so a corrected definition can be tried again.
+            ledger.cancel(transaction);
+            attempt.markActiveAfterFailedClaim();
         }
         questChanged.run();
         return result;
@@ -127,8 +127,8 @@ public final class QuestClaimService {
             // No durable cost-commit marker exists. Cancel rather than risk granting a reward
             // for an operation that may never have consumed its inputs.
             ledger.cancel(transaction);
-            engine.findOccurrence(transaction.questId())
-                    .flatMap(occurrence -> engine.existingAttempt(player.getUUID(), occurrence.key()))
+            currentOccurrence(transaction)
+                    .map(occurrence -> engine.attempt(player.getUUID(), occurrence))
                     .ifPresent(QuestAttempt::markActiveAfterFailedClaim);
             questChanged.run();
             return ClaimResult.failure("Interrupted claim was cancelled; submit the claim again");
@@ -138,12 +138,18 @@ public final class QuestClaimService {
         }
         ClaimResult result = grantRemaining(transaction, player);
         if (result.state() == ClaimState.SUCCESS) {
-            engine.findOccurrence(transaction.questId())
+            currentOccurrence(transaction)
                     .flatMap(occurrence -> engine.existingAttempt(player.getUUID(), occurrence.key()))
                     .ifPresent(QuestAttempt::markClaimed);
         }
         questChanged.run();
         return result;
+    }
+
+    /// A pending daily reward may outlive its rotation; never project it onto a newer occurrence.
+    private Optional<QuestModel.Occurrence> currentOccurrence(QuestLedger.PendingTransaction transaction) {
+        return engine.findOccurrence(transaction.questId())
+                .filter(occurrence -> occurrence.key().persistentKey().equals(transaction.occurrenceKey()));
     }
 
     /// Retries a player's pending rewards, optionally reopening administrator-reviewed failures.
@@ -172,7 +178,8 @@ public final class QuestClaimService {
         return quest.rewards().inlineRewards();
     }
 
-    /// Grants rewards from the durable cursor and checkpoints after every successful grant.
+    /// Grants from the durable cursor and checkpoints after each success. A crash between an
+    /// external grant and its save can repeat that grant unless its provider is idempotent.
     private ClaimResult grantRemaining(
             QuestLedger.PendingTransaction transaction,
             ServerPlayer player

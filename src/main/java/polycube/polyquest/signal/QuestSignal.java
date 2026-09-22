@@ -14,7 +14,7 @@ import java.util.Set;
 public sealed interface QuestSignal
         permits QuestSignal.LootGenerated,
         QuestSignal.Advancement, QuestSignal.CriteriaMatched,
-        QuestSignal.PlayerTick, QuestSignal.Explicit {
+        QuestSignal.Explicit {
     ServerPlayer player();
 
     long serverTick();
@@ -50,8 +50,6 @@ public sealed interface QuestSignal
             registrationIds = Set.copyOf(registrationIds);
         }
     }
-
-    record PlayerTick(ServerPlayer player, long serverTick) implements QuestSignal {}
 
     record Explicit(ServerPlayer player, long serverTick, Identifier signalId) implements QuestSignal {}
 }

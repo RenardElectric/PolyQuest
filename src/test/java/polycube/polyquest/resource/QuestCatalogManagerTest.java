@@ -3,6 +3,7 @@ package polycube.polyquest.resource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.model.QuestModel;
+import polycube.polyquest.reward.BuiltInRewards;
 import polycube.polyquest.reward.RewardApi;
 
 final class QuestCatalogManagerTest {
@@ -39,6 +41,27 @@ final class QuestCatalogManagerTest {
 
         assertEquals(java.util.Set.of(behaviorId), diff.behaviorChanged());
         assertEquals(java.util.Set.of(presentationId), diff.presentationChanged());
+    }
+
+    @Test
+    void profileDisplayTextRefreshesPresentationWithoutResettingProgress() {
+        Identifier questId = id("profile_presentation");
+        Identifier profileId = id("profile");
+        QuestModel.Definition definition = definitionWithRewards(
+                questId, new RewardApi.Plan(Optional.of(profileId), List.of()));
+        QuestModel.Catalog before = new QuestModel.Catalog(
+                Map.of(questId, definition),
+                Map.of(profileId, new RewardApi.Profile(profileId, List.of(
+                        new BuiltInRewards.Money(BigInteger.TEN, "Ten coins", id("coin"))))));
+        QuestModel.Catalog after = new QuestModel.Catalog(
+                Map.of(questId, definition),
+                Map.of(profileId, new RewardApi.Profile(profileId, List.of(
+                        new BuiltInRewards.Money(BigInteger.TEN, "10 coins", id("coin"))))));
+
+        QuestCatalogManager.Diff diff = QuestCatalogManager.Diff.between(before, after);
+
+        assertEquals(java.util.Set.of(questId), diff.presentationChanged());
+        assertTrue(diff.behaviorChanged().isEmpty());
     }
 
     @Test
@@ -76,6 +99,12 @@ final class QuestCatalogManagerTest {
                 new BuiltInConditions.ExplicitSignal(id, 1),
                 new RewardApi.Plan(Optional.empty(), List.of()),
                 behaviorHash);
+    }
+
+    private static QuestModel.Definition definitionWithRewards(Identifier id, RewardApi.Plan rewards) {
+        return new QuestModel.Definition(
+                id, QuestModel.Availability.UNIQUE, Optional.empty(), "Quest", List.of(),
+                Items.SUNFLOWER, new BuiltInConditions.ExplicitSignal(id, 1), rewards, "same");
     }
 
     private static Identifier id(String path) {

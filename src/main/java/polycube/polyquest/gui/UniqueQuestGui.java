@@ -8,7 +8,9 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Items;
 import polycube.polycore.text.TextComponents;
+import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.model.QuestModel;
+import polycube.polyquest.runtime.QuestManager;
 
 import java.util.Comparator;
 
@@ -23,44 +25,54 @@ public final class UniqueQuestGui extends QuestGui {
 
     private int index;
 
-    private UniqueQuestGui(ServerPlayer player) {
-        super(MenuType.GENERIC_9x6, player, TITLE);
-        index = 0;
+    private UniqueQuestGui(ServerPlayer player, QuestManager manager) {
+        super(MenuType.GENERIC_9x6, player, TITLE, manager);
     }
 
     public static void open(ServerPlayer player) {
-        new UniqueQuestGui(player);
+        PolyQuestApi.manager().result().ifPresent(manager -> new UniqueQuestGui(player, manager).open());
     }
 
     @Override
-    public void refresh() {
+    protected void render() {
         for (int slot = 0; slot < MENU_SIZE; slot++) {
             clearSlot(slot);
         }
 
         renderBackground();
 
-        var attemptsCount = QuestModel.AttemptStatus.values().length;
-        var dailyQuests = manager.available().stream()
+        var uniqueQuests = manager.available().stream()
                 .filter(quest -> quest.definition().availability() == QuestModel.Availability.UNIQUE)
                 .sorted(Comparator
-                        .comparingInt((QuestModel.Occurrence quest) -> attemptsCount - manager.attempt(player.nameAndId(), quest).status().ordinal())
+                        .comparingInt((QuestModel.Occurrence quest) -> statusOrder(
+                                manager.attempt(player.nameAndId(), quest).status()))
                         .thenComparing((QuestModel.Occurrence quest) -> quest.definition().id().toString()))
                 .toList();
-        int visibleQuestsStart = Math.min(index * QUESTS_PER_PAGE, dailyQuests.size());
-        int visibleQuestsEnd = Math.min(dailyQuests.size(), visibleQuestsStart + QUESTS_PER_PAGE);
+        index = Math.clamp((uniqueQuests.size() - 1) / QUESTS_PER_PAGE, 0, index);
+        int visibleQuestsStart = Math.min(index * QUESTS_PER_PAGE, uniqueQuests.size());
+        int visibleQuestsEnd = Math.min(uniqueQuests.size(), visibleQuestsStart + QUESTS_PER_PAGE);
 
         for (int i = visibleQuestsStart; i < visibleQuestsEnd; i++) {
-            setSlot(i - visibleQuestsStart, createQuestSlot(dailyQuests.get(i)));
+            setSlot(i - visibleQuestsStart, createQuestSlot(uniqueQuests.get(i)));
         }
 
         if (index > 0) {
             setSlot(BACKWARD_SLOT, createBackwardSlot());
         }
-        if (visibleQuestsEnd < dailyQuests.size()) {
+        if (visibleQuestsEnd < uniqueQuests.size()) {
             setSlot(FORWARD_SLOT, createForwardSlot());
         }
         setSlot(BACK_SLOT, createBackSlot());
+    }
+
+    private static int statusOrder(QuestModel.AttemptStatus status) {
+        return switch (status) {
+            case READY_TO_CLAIM -> 0;
+            case CLAIM_PENDING -> 1;
+            case ACTIVE -> 2;
+            case EXHAUSTED -> 3;
+            case CLAIMED -> 4;
+        };
     }
 
     private void renderBackground() {

@@ -88,7 +88,8 @@ public final class QuestAttempt {
 
     public void markPending() {
         status = QuestModel.AttemptStatus.CLAIM_PENDING;
-        root.close();
+        // Keep registrations available for a failed claim to resume without discarding progress.
+        // onSignal/tick are suppressed while pending by terminal().
     }
 
     public void markClaimed() {
@@ -123,7 +124,8 @@ public final class QuestAttempt {
     }
 
     private boolean terminal() {
-        return status == QuestModel.AttemptStatus.CLAIMED
+        return status == QuestModel.AttemptStatus.READY_TO_CLAIM
+                || status == QuestModel.AttemptStatus.CLAIMED
                 || status == QuestModel.AttemptStatus.CLAIM_PENDING
                 || status == QuestModel.AttemptStatus.EXHAUSTED;
     }

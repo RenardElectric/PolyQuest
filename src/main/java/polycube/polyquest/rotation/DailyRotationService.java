@@ -3,6 +3,7 @@ package polycube.polyquest.rotation;
 import polycube.polyquest.config.QuestConfig;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.persistence.QuestLedger;
+import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -14,6 +15,7 @@ import java.util.*;
 public final class DailyRotationService {
     private final QuestConfig config;
     private QuestModel.DailyAssignment assignment = new QuestModel.DailyAssignment(LocalDate.MIN, Map.of());
+    private QuestModel.@Nullable Catalog lastCatalog;
 
     public DailyRotationService(QuestConfig config) {
         this.config = config;
@@ -28,6 +30,9 @@ public final class DailyRotationService {
         ZoneId zone = config.timeZone();
         LocalDate today = LocalDate.now(zone);
         boolean dateChanged = !today.equals(assignment.date());
+        if (!dateChanged && catalog == lastCatalog && generationsMatch(ledger)) {
+            return new RefreshResult(false, false);
+        }
         if (dateChanged) {
             ledger.beginRotation(today);
         }
@@ -56,7 +61,19 @@ public final class DailyRotationService {
         QuestModel.DailyAssignment next = new QuestModel.DailyAssignment(today, slots);
         boolean changed = !sameOccurrences(assignment, next);
         assignment = next;
+        lastCatalog = catalog;
         return new RefreshResult(changed, dateChanged);
+    }
+
+    /// Skips rebuilding selections when the date, catalog, and reroll generations are unchanged.
+    private boolean generationsMatch(QuestLedger ledger) {
+        for (var entry : assignment.slots().entrySet()) {
+            var scope = (QuestModel.DailyScope) entry.getValue().key().scope();
+            if (ledger.rotationGeneration(entry.getKey()) != scope.generation()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public boolean reroll(QuestModel.Difficulty difficulty, QuestModel.Catalog catalog, QuestLedger ledger) {

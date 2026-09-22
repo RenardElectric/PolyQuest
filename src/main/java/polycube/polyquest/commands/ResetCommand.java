@@ -14,7 +14,6 @@ import polycube.polycore.commands.PolyCommand;
 import polycube.polycore.text.TextComponents;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
-import polycube.polyquest.commands.commandArguments.QuestArgument;
 
 import java.util.Collection;
 import java.util.List;
@@ -58,7 +57,7 @@ public final class ResetCommand extends PolyCommand {
         CommandResult.require(PolyQuestApi.reset(player, id));
 
         var message = TextComponents.success("Reset ")
-                .append(QuestCommandText.quest(occurrence, previousStatus, player))
+                .append(QuestCommandText.quest(source.getServer(), occurrence, previousStatus, player))
                 .append(" for ").append(TextComponents.value(player.name())).append(".")
                 .append(TextComponents.field("Previous status", QuestCommandText.status(previousStatus)))
                 .append("\n").append(TextComponents.action("[Inspect quest]", "/" + PolyQuest.MOD_ID + " inspect " + id + " " + player.name()));

@@ -68,20 +68,20 @@ public final class ListCommand extends PolyCommand {
             message.append("\n\n  ").append(TextComponents.muted("No quests are currently available."));
         }
         for (QuestEntry quest : quests) {
-            appendQuest(message, quest, player);
+            appendQuest(source, message, quest, player);
         }
         source.sendSuccess(() -> message, false);
         return 1;
     }
 
     /// Adds one compact quest row; the hover card carries objective and reward details.
-    private static void appendQuest(MutableComponent message, QuestEntry entry, NameAndId player) {
+    private static void appendQuest(CommandSourceStack source, MutableComponent message, QuestEntry entry, NameAndId player) {
         var occurrence = entry.occurrence();
         var id = occurrence.definition().id();
         message.append("\n  ")
                 .append(QuestCommandText.status(entry.status()))
                 .append("  ")
-                .append(QuestCommandText.quest(occurrence, entry.status(), player))
+                .append(QuestCommandText.quest(source.getServer(), occurrence, entry.status(), player))
                 .append(TextComponents.muted(" • " + QuestCommandText.availability(occurrence.definition()) + " • " + QuestCommandText.expiry(occurrence)));
         QuestCommandText.appendStateAction(message, entry.status(), id, player);
     }

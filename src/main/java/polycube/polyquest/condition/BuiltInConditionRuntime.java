@@ -257,6 +257,7 @@ final class BuiltInConditionRuntime {
             List<ItemStack> removed = new ArrayList<>();
             int remaining = required;
             for (var stack : inventory) {
+                if (remaining == 0) break;
                 if (stack.isEmpty() || !predicate.test(stack)) continue;
                 int amount = Math.min(remaining, stack.getCount());
                 ItemStack taken = stack.copyWithCount(amount);

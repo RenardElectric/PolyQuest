@@ -4,8 +4,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import java.util.Map;
@@ -33,6 +35,8 @@ final class QuestResourceCompilerTest {
         ConditionApi.register(BuiltInConditions.ExplicitSignal.TYPE);
         ConditionApi.register(BuiltInConditions.LootItem.TYPE);
         RewardApi.register(BuiltInRewards.Experience.TYPE);
+        RewardApi.register(BuiltInRewards.Money.TYPE);
+        RewardApi.register(BuiltInRewards.ServerCommands.TYPE);
     }
 
     @Test
@@ -232,5 +236,64 @@ final class QuestResourceCompilerTest {
                 Objects.requireNonNull(catalog.quests().get(questId)).condition());
         assertTrue(condition.entity().isPresent());
         assertEquals(1, condition.count());
+    }
+
+    @Test
+    void inlineRewardLabelsDoNotChangeFunctionalFingerprint() {
+        String original = """
+                {
+                  "availability": "unique",
+                  "title": "Reward labels",
+                  "icon": "minecraft:beacon",
+                  "condition": { "type": "polyquest:explicit_signal", "signal": "test:complete" },
+                  "rewards": { "rewards": [
+                    { "type": "polyquest:money", "amount": "10", "formatted_amount": "Ten coins", "currency": "test:coin" },
+                    { "type": "polyquest:commands", "title": "Bundle", "commands": ["say hello"] }
+                  ] }
+                }
+                """;
+
+        String cosmetic = original.replace("Ten coins", "10 shiny coins").replace("Bundle", "Greeting");
+        String functional = original.replace("\"amount\": \"10\"", "\"amount\": \"11\"");
+
+        assertEquals(behaviorHash(original, Map.of()), behaviorHash(cosmetic, Map.of()));
+        assertNotEquals(behaviorHash(original, Map.of()), behaviorHash(functional, Map.of()));
+    }
+
+    @Test
+    void referencedProfileLabelsDoNotChangeFunctionalFingerprint() {
+        String quest = """
+                {
+                  "availability": "unique",
+                  "title": "Profile reward",
+                  "icon": "minecraft:beacon",
+                  "condition": { "type": "polyquest:explicit_signal", "signal": "test:complete" },
+                  "rewards": { "profile": "test:bundle" }
+                }
+                """;
+        String profile = """
+                { "rewards": [
+                  { "type": "polyquest:money", "amount": "10", "formatted_amount": "Ten coins", "currency": "test:coin" },
+                  { "type": "polyquest:commands", "title": "Bundle", "commands": ["say hello"] }
+                ] }
+                """;
+        Identifier profileId = Identifier.fromNamespaceAndPath("test", "bundle");
+
+        assertEquals(
+                behaviorHash(quest, Map.of(profileId, JsonParser.parseString(profile))),
+                behaviorHash(quest, Map.of(profileId, JsonParser.parseString(profile.replace("Ten coins", "More coins").replace("Bundle", "Greeting")))));
+        assertNotEquals(
+                behaviorHash(quest, Map.of(profileId, JsonParser.parseString(profile))),
+                behaviorHash(quest, Map.of(profileId, JsonParser.parseString(profile.replace("say hello", "say goodbye")))));
+    }
+
+    private static String behaviorHash(String quest, Map<Identifier, JsonElement> profiles) {
+        Identifier questId = Identifier.fromNamespaceAndPath("test", "behavior_hash");
+        QuestResourceCompiler.ResourceSet resources = new QuestResourceCompiler.ResourceSet(
+                Map.of(questId, JsonParser.parseString(quest)), Map.of(), profiles);
+        return Objects.requireNonNull(new QuestResourceCompiler()
+                .compile(resources, JsonOps.INSTANCE)
+                .getOrThrow()
+                .quests().get(questId)).behaviorHash();
     }
 }

@@ -81,7 +81,7 @@ public final class BuiltInConditions {
         }
     }
 
-    /// Triggers when a specified redstone signal is received, optionally filtered by count.
+    /// Counts explicit signals emitted through the PolyQuest API or administrator command.
     public record ExplicitSignal(Identifier signal, int count) implements ConditionApi.Definition {
         public static final MapCodec<ExplicitSignal> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 Identifier.CODEC.fieldOf("signal").forGetter(ExplicitSignal::signal),

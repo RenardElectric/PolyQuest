@@ -1,15 +1,12 @@
 package polycube.polyquest.presentation;
 
 import com.google.gson.JsonObject;
-import com.mojang.serialization.JsonOps;
 import net.minecraft.ChatFormatting;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.NameAndId;
-import polycube.polyquest.PolyQuest;
 import polycube.polyquest.commands.QuestCommandText;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.condition.CompositeConditions;
@@ -244,7 +241,7 @@ public final class QuestDisplay {
             }
             default -> {
                 var suffix = getProgressSummary(condition, diagnostic, status);
-                lines.add(conditionFormat(prefix, conditionSummary(condition) + suffix, ChatFormatting.WHITE, ChatFormatting.WHITE, status, depth));
+                lines.add(conditionFormat(prefix, ConditionText.summary(server, condition), suffix, ChatFormatting.WHITE, ChatFormatting.WHITE, status, depth));
             }
         }
     }
@@ -278,11 +275,10 @@ public final class QuestDisplay {
     }
 
     private static MutableComponent conditionFormat(String prefix, String text, ChatFormatting prefixColor, ChatFormatting titleColor, ConditionStatus status, int depth) {
-        var suffix = switch (status) {
-            case CLAIMED -> " ✓";
-            case EXHAUSTED -> " ✕";
-            default -> "";
-        };
+        return conditionFormat(prefix, Component.literal(text), "", prefixColor, titleColor, status, depth);
+    }
+
+    private static MutableComponent conditionFormat(String prefix, Component text, String suffix, ChatFormatting prefixColor, ChatFormatting titleColor, ConditionStatus status, int depth) {
         var tColor = switch (status) {
             case CLAIMED -> ChatFormatting.GREEN;
             case EXHAUSTED -> ChatFormatting.RED;
@@ -293,7 +289,17 @@ public final class QuestDisplay {
             case EXHAUSTED -> ChatFormatting.RED;
             default -> prefixColor;
         };
-        return styled("   ".repeat(depth) + prefix, pColor).append(styled(text + suffix, tColor));
+        return styled("   ".repeat(depth) + prefix, pColor)
+                .append(text.copy().withStyle(tColor))
+                .append(styled(suffix + suffix(status), tColor));
+    }
+
+    private static String suffix(ConditionStatus status) {
+        return switch (status) {
+            case CLAIMED -> " ✓";
+            case EXHAUSTED -> " ✕";
+            default -> "";
+        };
     }
 
     private String getProgressSummary(ConditionApi.Definition condition, JsonObject diagnostic, ConditionStatus status) {
@@ -323,26 +329,6 @@ public final class QuestDisplay {
     private static boolean conditionActive(JsonObject diagnostic, ConditionStatus forceStatus) {
         var status = conditionStatus(diagnostic, forceStatus);
         return status == ConditionStatus.DEFAULT || status == ConditionStatus.ACTIVE;
-    }
-
-    private String conditionSummary(ConditionApi.Definition condition) {
-        var ops = manager.server().registryAccess().createSerializationContext(JsonOps.INSTANCE);
-
-        return switch (condition) {
-            case BuiltInConditions.AdvancementCriterion value -> "Satisfy " + humanize(Optional.ofNullable(BuiltInRegistries.TRIGGER_TYPES.getKey(value.criterion().trigger())).orElse(PolyQuest.id("not_found"))) + " criterion";
-            case BuiltInConditions.ConsumeItems value -> "Turn in " + value.count() + "× " + itemTarget(value.item());
-            case BuiltInConditions.LootItem value -> lootItemSummary(value);
-            case BuiltInConditions.ObtainAdvancement value -> "Complete " + humanize(value.advancement()) + " advancement";
-            case BuiltInConditions.ExplicitSignal value when value.count() > 1 -> "Trigger " + humanize(value.signal()) + " " + value.count() + " times";
-            case BuiltInConditions.ExplicitSignal value -> "Trigger " + humanize(value.signal());
-            default -> humanize(condition.type().id());
-        };
-    }
-
-    private static String lootItemSummary(BuiltInConditions.LootItem condition) {
-        String source = condition.entity().isPresent() ? " from a matching entity" : " from loot";
-        String repetitions = condition.count() > 1 ? " " + condition.count() + " times" : "";
-        return "Loot " + itemTarget(condition.item()) + source + repetitions;
     }
 
     private static Optional<Progress> progress(ConditionApi.Definition condition, JsonObject diagnostic, ConditionStatus status) {

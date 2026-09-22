@@ -8,7 +8,9 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Items;
 import polycube.polycore.text.TextComponents;
+import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.model.QuestModel;
+import polycube.polyquest.runtime.QuestManager;
 
 import java.util.Comparator;
 
@@ -23,16 +25,16 @@ public final class QuestJournalGui extends QuestGui {
                     .orElse(Integer.MAX_VALUE))
             .thenComparing(quest -> quest.definition().id().toString());
 
-    private QuestJournalGui(ServerPlayer player) {
-        super(MenuType.GENERIC_9x3, player, TITLE);
+    private QuestJournalGui(ServerPlayer player, QuestManager manager) {
+        super(MenuType.GENERIC_9x3, player, TITLE, manager);
     }
 
     public static void open(ServerPlayer player) {
-        new QuestJournalGui(player);
+        PolyQuestApi.manager().result().ifPresent(manager -> new QuestJournalGui(player, manager).open());
     }
 
     @Override
-    public void refresh() {
+    protected void render() {
         renderBackground();
 
         var dailyQuests = manager.available().stream()

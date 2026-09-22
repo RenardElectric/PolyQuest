@@ -11,36 +11,38 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Items;
+import org.jspecify.annotations.Nullable;
 import polycube.polycore.text.TextComponents;
-import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.model.QuestModel;
+import polycube.polyquest.condition.CompositeConditions;
+import polycube.polyquest.condition.ConditionApi;
 import polycube.polyquest.presentation.QuestDisplay;
 import polycube.polyquest.runtime.QuestManager;
 
 public abstract class QuestGui extends SimpleGui {
-    private static final int REFRESH_INTERVAL_TICKS = 20;
+    private static final int TIMED_REFRESH_TICKS = 20;
+    private static final int ORDINARY_REFRESH_TICKS = 20 * 60;
 
     protected final ServerPlayer player;
-    @SuppressWarnings("NotNullFieldNotInitialized")
-    protected QuestManager manager;
-    @SuppressWarnings("NotNullFieldNotInitialized")
-    private QuestManager.Subscription subscription;
+    protected final QuestManager manager;
+    private final Component title;
+    private QuestManager.@Nullable Subscription subscription;
     private int tickCounter;
     private int interactionCooldown;
+    private boolean timedQuestVisible;
+    private boolean expiringQuestVisible;
 
-    @SuppressWarnings("this-escape")
-    public QuestGui(MenuType<?> menuType, ServerPlayer player, Component title) {
+    protected QuestGui(MenuType<?> menuType, ServerPlayer player, Component title, QuestManager manager) {
         super(menuType, player, false);
         this.player = player;
-        this.setTitle(title);
-        open();
+        this.manager = manager;
+        this.title = title;
     }
 
     @Override
     public void onTick() {
-        if (++tickCounter >= REFRESH_INTERVAL_TICKS) {
+        if ((timedQuestVisible || expiringQuestVisible) && ++tickCounter >= (timedQuestVisible ? TIMED_REFRESH_TICKS : ORDINARY_REFRESH_TICKS)) {
             refresh();
-            tickCounter = 0;
         }
         if (interactionCooldown > 0) {
             interactionCooldown--;
@@ -49,35 +51,57 @@ public abstract class QuestGui extends SimpleGui {
 
     @Override
     public boolean open() {
-        var questManager = PolyQuestApi.manager();
-        if (questManager.isError()) {
+        if (player.hasDisconnected() || isOpen()) {
             return false;
         }
-        manager = questManager.getOrThrow();
+        setTitle(title);
         subscription = manager.addListener(this::refresh);
-        refresh();
-        return super.open();
+        boolean opened = false;
+        try {
+            refresh();
+            opened = super.open();
+            return opened;
+        } finally {
+            if (!opened) {
+                closeSubscription();
+            }
+        }
     }
 
     @Override
     public void onManualClose() {
-        subscription.close();
+        closeSubscription();
         super.onManualClose();
     }
 
     @Override
     public void onPlayerClose(boolean success) {
-        subscription.close();
+        closeSubscription();
         super.onPlayerClose(success);
     }
 
     @Override
     public void close() {
-        subscription.close();
+        closeSubscription();
         super.close();
     }
 
-    public abstract void refresh();
+    private void closeSubscription() {
+        if (subscription != null) {
+            subscription.close();
+            subscription = null;
+        }
+    }
+
+    /// Refreshes visible slots on state changes and tracks whether their timers need a live clock.
+    public final void refresh() {
+        tickCounter = 0;
+        timedQuestVisible = false;
+        expiringQuestVisible = false;
+        render();
+    }
+
+    protected abstract void render();
 
     protected static GuiElementBuilder createBackgroundSlot() {
         return new GuiElementBuilder()
@@ -88,6 +112,8 @@ public abstract class QuestGui extends SimpleGui {
 
     // Renders the player-facing quest presentation and retains the existing claim callback.
     protected GuiElementBuilder createQuestSlot(QuestModel.Occurrence quest) {
+        timedQuestVisible |= hasTimeWindow(quest.definition().condition());
+        expiringQuestVisible |= quest.availableUntil().isPresent();
         var display = QuestDisplay.format(manager, player.level().getServer(), player.nameAndId(), quest);
         var definition = quest.definition();
         var element = new GuiElementBuilder()
@@ -123,5 +149,19 @@ public abstract class QuestGui extends SimpleGui {
 
     protected static void playSound(ServerPlayer player, SoundEvent sound) {
         player.connection.send(new ClientboundSoundPacket(BuiltInRegistries.SOUND_EVENT.wrapAsHolder(sound), SoundSource.PLAYERS, player.getX(), player.getY(), player.getZ(), 1.0f, 1.0f, player.getRandom().nextLong()));
+    }
+
+    private static boolean hasTimeWindow(ConditionApi.Definition condition) {
+        return switch (condition) {
+            case CompositeConditions.TimeWindow ignored -> true;
+            case CompositeConditions.AllOf value -> value.children().stream().anyMatch(QuestGui::hasTimeWindow);
+            case CompositeConditions.AnyOf value -> value.children().stream().anyMatch(QuestGui::hasTimeWindow);
+            case CompositeConditions.NOfM value -> value.children().stream().anyMatch(QuestGui::hasTimeWindow);
+            case CompositeConditions.Sequence value -> value.children().stream().anyMatch(QuestGui::hasTimeWindow);
+            case CompositeConditions.Repeat value -> hasTimeWindow(value.child());
+            case CompositeConditions.OptionalChild value -> hasTimeWindow(value.child());
+            case CompositeConditions.Choice value -> value.branches().stream().anyMatch(branch -> hasTimeWindow(branch.condition()));
+            default -> false;
+        };
     }
 }

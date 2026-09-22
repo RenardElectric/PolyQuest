@@ -2,6 +2,7 @@ package polycube.polyquest.reward;
 
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.ParseResults;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
@@ -17,6 +18,7 @@ import net.minecraft.world.item.ItemStackTemplate;
 import polycube.polyquest.PolyQuest;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 
 /// Built-in money, item, experience, and server-command rewards.
@@ -165,12 +167,23 @@ public final class BuiltInRewards {
                 .withSuppressedOutput()
                 .withPermission(PermissionSet.ALL_PERMISSIONS);
         Commands commandManager = context.server().getCommands();
+        List<ParseResults<CommandSourceStack>> parsedCommands = new ArrayList<>(reward.commands().size());
+        // Check every command before executing any, so a malformed later command cannot
+        // turn a partially granted bundle into a reported success.
         for (String command : reward.commands()) {
             String expanded = command
                     .replace("{player}", player.getScoreboardName())
                     .replace("{uuid}", player.getUUID().toString());
             ParseResults<CommandSourceStack> parsed = commandManager.getDispatcher().parse(expanded, source);
-            commandManager.performCommand(parsed, expanded);
+            try {
+                Commands.validateParseResults(parsed);
+            } catch (CommandSyntaxException exception) {
+                return RewardApi.GrantResult.permanentFailure("Invalid reward command: " + exception.getRawMessage().getString());
+            }
+            parsedCommands.add(parsed);
+        }
+        for (ParseResults<CommandSourceStack> parsed : parsedCommands) {
+            commandManager.performCommand(parsed, parsed.getReader().getString());
         }
         return RewardApi.GrantResult.success();
     }

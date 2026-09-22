@@ -72,7 +72,7 @@ public final class QuestCatalogManager {
                 QuestModel.Definition newQuest = Objects.requireNonNull(newCatalog.quests().get(id));
                 if (!oldQuest.behaviorHash().equals(newQuest.behaviorHash())) {
                     behaviorChanged.add(id);
-                } else if (!samePresentation(oldQuest, newQuest)) {
+                } else if (!samePresentation(oldQuest, newQuest, oldCatalog, newCatalog)) {
                     presentationChanged.add(id);
                 } else {
                     unchanged.add(id);
@@ -83,11 +83,17 @@ public final class QuestCatalogManager {
 
         private static boolean samePresentation(
                 QuestModel.Definition first,
-                QuestModel.Definition second
+                QuestModel.Definition second,
+                QuestModel.Catalog oldCatalog,
+                QuestModel.Catalog newCatalog
         ) {
             return first.title().equals(second.title())
                     && first.description().equals(second.description())
-                    && first.icon().equals(second.icon());
+                    && first.icon().equals(second.icon())
+                    && first.rewards().equals(second.rewards())
+                    && first.rewards().profile().map(profileId -> Objects.equals(
+                            oldCatalog.rewardProfiles().get(profileId),
+                            newCatalog.rewardProfiles().get(profileId))).orElse(true);
         }
     }
 }

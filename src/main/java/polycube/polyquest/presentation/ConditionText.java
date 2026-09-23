@@ -3,7 +3,8 @@ package polycube.polyquest.presentation;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.serialization.JsonOps;
-import net.minecraft.advancements.DisplayInfo;
+import net.minecraft.advancements.Advancement;
+import net.minecraft.ChatFormatting;
 import net.minecraft.advancements.triggers.Criterion;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -47,11 +48,16 @@ public final class ConditionText {
     private static Component advancement(MinecraftServer server, Identifier id) {
         var holder = server.getAdvancements().get(id);
         if (holder == null) {
-            return Component.literal("Complete advancement " + id + " (not found)");
+            return Component.literal("Complete ")
+                    .append(Component.literal("[" + id + "]").withStyle(ChatFormatting.GRAY))
+                    .append(" (advancement not found)");
         }
-        return Component.literal("Complete ")
-                .append(holder.value().display().map(DisplayInfo::title).orElseGet(() -> Component.literal(id.toString())))
-                .append(" advancement");
+        if (holder.value().display().isEmpty()) {
+            return Component.literal("Complete ")
+                    .append(Component.literal("[" + id + "]").withStyle(ChatFormatting.GRAY));
+        }
+        // Vanilla supplies the title's frame color, brackets, and description hover.
+        return Component.literal("Complete ").append(Advancement.name(holder));
     }
 
     private static Component criterion(MinecraftServer server, Criterion<?> criterion) {

@@ -14,9 +14,12 @@ import polycube.polyquest.presentation.ConditionText;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 
 import static polycube.polycore.text.TextComponents.*;
 import static polycube.polycore.text.TextCore.*;
+import static polycube.polycore.text.TextUtil.descriptionLines;
 
 /// Shared, vanilla-client-compatible chat formatting. Never styles a caller's component in place.
 public final class QuestCommandText {
@@ -113,7 +116,7 @@ public final class QuestCommandText {
         var message = Component.empty();
         int visibleLines = Math.min(quest.description().size(), 4);
         for (int index = 0; index < visibleLines; index++) {
-            message.append("\n  ").append(Component.literal(quest.description().get(index)).withStyle(ChatFormatting.GRAY));
+            message.append("\n  ").append(colored(quest.description().get(index), ChatFormatting.GRAY));
         }
         if (quest.description().size() > visibleLines) {
             message.append("\n  ").append(muted("… " + (quest.description().size() - visibleLines) + " more line(s)"));
@@ -131,12 +134,30 @@ public final class QuestCommandText {
     }
 
     public static MutableComponent dailyRotation() {
-        return Component.literal("[PolyQuest] ").withStyle(ChatFormatting.GOLD).append("New daily quests are available at the Quest Giver.");
+        return message().append("New daily quests are available at the Quest Giver.");
     }
 
     public static MutableComponent progressReset() {
-        return Component.literal("[PolyQuest] ").withStyle(ChatFormatting.GOLD)
-                .append(Component.literal("Some quests were updated, so your progress was reset.").withStyle(ChatFormatting.GRAY));
+        return message().append(colored("Some quests were updated, so your progress was reset.", ChatFormatting.GRAY));
+    }
+
+    public static MutableComponent questCompleted(QuestModel.Occurrence occurrence) {
+        return message()
+                .append(colored("Quest completed: ", ChatFormatting.GREEN))
+                .append(styled(occurrence.definition().title(), ChatFormatting.AQUA, true))
+                .append(colored(". Visit the Quest Giver to claim your reward.", ChatFormatting.GRAY));
+    }
+
+    /// Lists every currently claimable quest without persisting notification receipts.
+    public static Optional<MutableComponent> unclaimedSummary(List<QuestModel.Occurrence> ready) {
+        if (ready.isEmpty()) return Optional.empty();
+        var message = message();
+        message.append(colored(count(ready.size(), "quest") + " ready to claim: ", ChatFormatting.GREEN));
+        for (int index = 0; index < ready.size(); index++) {
+            if (index > 0) message.append(colored(", ", ChatFormatting.GRAY));
+            message.append(value(ready.get(index).definition().title()));
+        }
+        return Optional.of(message.append(colored(". Visit the Quest Giver.", ChatFormatting.GRAY)));
     }
 
     public static MutableComponent diagnostics(Identifier id, NameAndId player) {
@@ -144,7 +165,7 @@ public final class QuestCommandText {
         if (diagnostic.error().isPresent()) {
             return hover(Component.literal("[Copy diagnostics]"), error("Failed to retrieve diagnostics for quest " + id + " for player " + player.name() + ": " + diagnostic.error().get()));
         }
-        return copy("[Copy diagnostics]", diagnostic.getOrThrow());
+        return copy("[Copy diagnostics]", diagnostic.getOrThrow(), muted("Click to copy full quest diagnostics."));
     }
 
     private static MutableComponent questTooltip(
@@ -153,13 +174,10 @@ public final class QuestCommandText {
             QuestModel.AttemptStatus status
     ) {
         QuestModel.Definition quest = occurrence.definition();
-        var tooltip = Component.literal("").append(Component.literal(quest.title()).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)).append("\n").append(muted(quest.id().toString()));
-        int descriptionLines = Math.min(quest.description().size(), 4);
-        for (int index = 0; index < descriptionLines; index++) {
-            tooltip.append("\n").append(Component.literal(abbreviate(quest.description().get(index), 120)).withStyle(ChatFormatting.GRAY));
-        }
-        if (quest.description().size() > descriptionLines) {
-            tooltip.append("\n").append(muted("…"));
+        var tooltip = Component.empty().append(styled(quest.title(), ChatFormatting.GOLD, true))
+                .append("\n").append(muted(quest.id().toString()));
+        for (String line : descriptionLines(quest.description(), 120, 4)) {
+            tooltip.append("\n").append(colored(line, ChatFormatting.GRAY));
         }
         tooltip.append(field("Status", status(status)))
                 .append(field("Availability", value(availability(quest))))

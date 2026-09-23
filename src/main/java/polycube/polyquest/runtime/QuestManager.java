@@ -61,7 +61,7 @@ public final class QuestManager {
         if (tick % 20L == 0L) {
             refreshRotationAndEngine();
         }
-        if (engine.tick(tick)) questChanges.changed();
+        publishProgress(engine.tick(tick));
         if (tick >= nextRewardRetryTick) {
             nextRewardRetryTick = tick + config.pendingRewardRetrySeconds() * 20L;
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
@@ -71,7 +71,7 @@ public final class QuestManager {
     }
 
     public void signal(QuestSignal signal) {
-        if (engine.onSignal(signal)) questChanges.changed();
+        publishProgress(engine.onSignal(signal));
     }
 
     public boolean reroll(List<QuestModel.Difficulty> difficulties) {
@@ -95,6 +95,7 @@ public final class QuestManager {
         if (pendingResetNotifications.remove(player.getUUID())) {
             sendResetNotification(player);
         }
+        sendUnclaimedSummary(player);
     }
 
     public void onPlayerDisconnect(ServerPlayer player) {
@@ -217,6 +218,31 @@ public final class QuestManager {
 
     private static void sendResetNotification(ServerPlayer player) {
         player.sendSystemMessage(QuestCommandText.progressReset());
+    }
+
+    /// Announces only fresh ready transitions; reconnects get a current summary instead.
+    private void publishProgress(QuestEngine.ProgressResult progress) {
+        if (progress.changed()) questChanges.changed();
+        var notifiedPlayers = new HashSet<UUID>();
+        for (var completed : progress.completed()) {
+            var player = server.getPlayerList().getPlayer(completed.playerId());
+            if (player == null) continue;
+            player.sendSystemMessage(QuestCommandText.questCompleted(completed.occurrence()));
+            notifiedPlayers.add(completed.playerId());
+        }
+        for (var playerId : notifiedPlayers) {
+            ServerPlayer player = server.getPlayerList().getPlayer(playerId);
+            if (player != null) sendUnclaimedSummary(player);
+        }
+    }
+
+    private void sendUnclaimedSummary(ServerPlayer player) {
+        List<QuestModel.Occurrence> ready = engine.available().stream()
+                .filter(occurrence -> engine.existingAttempt(player.getUUID(), occurrence.key())
+                        .map(attempt -> attempt.status() == QuestModel.AttemptStatus.READY_TO_CLAIM)
+                        .orElse(false))
+                .toList();
+        QuestCommandText.unclaimedSummary(ready).ifPresent(player::sendSystemMessage);
     }
 
     @FunctionalInterface

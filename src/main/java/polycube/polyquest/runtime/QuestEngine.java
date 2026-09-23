@@ -38,7 +38,7 @@ public final class QuestEngine implements AutoCloseable {
     }
 
     /// Routes a signal through the player's reconciled attempts, materializing them if it arrives before join setup.
-    boolean onSignal(QuestSignal signal) {
+    ProgressResult onSignal(QuestSignal signal) {
         var playerId = signal.player().getUUID();
         var session = sessions.get(playerId);
         if (session == null) {
@@ -46,21 +46,45 @@ public final class QuestEngine implements AutoCloseable {
             session = sessions.get(playerId);
         }
         boolean changed = false;
+        List<CompletedQuest> completed = new ArrayList<>();
         for (QuestAttempt attempt : session.attempts()) {
+            QuestModel.AttemptStatus before = attempt.status();
             changed |= attempt.onSignal(signal, server).changed();
+            if (becameReady(before, attempt)) {
+                completed.add(new CompletedQuest(playerId, attempt.occurrence()));
+                changed = true;
+            }
         }
-        return changed;
+        return new ProgressResult(changed, completed);
     }
 
     /// Advances deadline-only nodes for online and offline in-memory sessions.
-    boolean tick(long serverTick) {
+    ProgressResult tick(long serverTick) {
         boolean changed = false;
-        for (PlayerQuestSession session : sessions.values()) {
-            for (QuestAttempt attempt : session.attempts()) {
+        List<CompletedQuest> completed = new ArrayList<>();
+        for (var entry : sessions.entrySet()) {
+            for (QuestAttempt attempt : entry.getValue().attempts()) {
+                QuestModel.AttemptStatus before = attempt.status();
                 changed |= attempt.tick(server, serverTick).changed();
+                if (becameReady(before, attempt)) {
+                    completed.add(new CompletedQuest(entry.getKey(), attempt.occurrence()));
+                    changed = true;
+                }
             }
         }
-        return changed;
+        return new ProgressResult(changed, completed);
+    }
+
+    private static boolean becameReady(QuestModel.AttemptStatus before, QuestAttempt attempt) {
+        return before != QuestModel.AttemptStatus.READY_TO_CLAIM && attempt.status() == QuestModel.AttemptStatus.READY_TO_CLAIM;
+    }
+
+    record CompletedQuest(UUID playerId, QuestModel.Occurrence occurrence) {}
+
+    record ProgressResult(boolean changed, List<CompletedQuest> completed) {
+        ProgressResult {
+            completed = List.copyOf(completed);
+        }
     }
 
     /// Returns globally selected occurrences.

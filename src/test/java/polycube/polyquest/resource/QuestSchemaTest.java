@@ -185,6 +185,33 @@ final class QuestSchemaTest {
         ), conditionReferences);
     }
 
+    @Test
+    void templatePrototypeOffersQuestAndNestedHintsWithoutRestrictingMarkers() throws IOException {
+        JsonObject template = read(SCHEMA_DIRECTORY.resolve("quest-template.schema.json"), new HashMap<>())
+                .getAsJsonObject();
+        JsonObject prototype = template.getAsJsonObject("properties").getAsJsonObject("prototype");
+        JsonObject fields = prototype.getAsJsonObject("properties");
+        JsonObject hints = template.getAsJsonObject("$defs");
+
+        assertTrue(prototype.get("additionalProperties").getAsBoolean());
+        assertTrue(prototype.getAsJsonArray("defaultSnippets").size() >= 2);
+        assertEquals(Set.of("template", "arguments", "availability", "difficulty", "title",
+                "description", "icon", "condition", "rewards"), fields.keySet());
+        assertEquals("#/$defs/conditionHint", fields.getAsJsonObject("condition").get("$ref").getAsString());
+        assertEquals("#/$defs/rewardPlanHint", fields.getAsJsonObject("rewards").get("$ref").getAsString());
+
+        for (String name : List.of("conditionHint", "rewardPlanHint", "rewardHint")) {
+            JsonObject hint = hints.getAsJsonObject(name);
+            assertFalse(hint.has("type"), () -> name + " must also accept a whole-value ${parameter} string");
+            assertFalse(hint.has("required"), () -> name + " must not require fields before expansion");
+            assertTrue(hint.get("additionalProperties").getAsBoolean());
+        }
+        JsonObject conditionType = hints.getAsJsonObject("conditionHint")
+                .getAsJsonObject("properties").getAsJsonObject("type");
+        assertFalse(conditionType.has("enum"), "A parameter may supply a condition type dynamically");
+        assertTrue(conditionType.getAsJsonArray("examples").size() > 1);
+    }
+
     private static void resolveReferences(
             Path currentFile, JsonElement element, Map<Path, JsonElement> documents
     ) throws IOException {

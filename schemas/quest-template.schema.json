@@ -15,8 +15,135 @@
     },
     "prototype": {
       "type": "object",
-      "description": "A quest body, another template invocation, or a mixture containing ${name} markers. It is fully validated after expansion."
+      "description": "A quest body, another template invocation, or a mixture containing ${name} markers. The fields below are editor hints, not pre-expansion validation; the expanded quest is validated by PolyQuest.",
+      "properties": {
+        "template": {
+          "description": "Invoke another quest template before applying the other top-level fields as overrides.",
+          "examples": ["example:base_quest", "${parent_template}"]
+        },
+        "arguments": {
+          "description": "Named arguments for the nested template. Whole-value ${name} markers can supply objects, arrays, numbers, or strings.",
+          "additionalProperties": true
+        },
+        "availability": {
+          "description": "Usually daily or unique; a parameter marker is also allowed.",
+          "examples": ["daily", "unique", "${availability}"]
+        },
+        "difficulty": {
+          "description": "Required after expansion for daily quests; omit for unique quests. May be a parameter marker.",
+          "examples": ["easy", "medium", "hard", "${difficulty}"]
+        },
+        "title": {
+          "description": "Player-facing quest title. Text may contain ${name} markers.",
+          "examples": ["Gather ${item_name}"]
+        },
+        "description": {
+          "description": "Player-facing text lines, or a whole-value marker that expands to an array.",
+          "items": { "description": "A text line; inline ${name} markers must expand to primitive values." },
+          "examples": [["Complete the objective."], "${description}"]
+        },
+        "icon": {
+          "description": "Quest icon item identifier, possibly supplied by a parameter.",
+          "examples": ["minecraft:book", "${icon}"]
+        },
+        "condition": { "$ref": "#/$defs/conditionHint" },
+        "rewards": { "$ref": "#/$defs/rewardPlanHint" }
+      },
+      "defaultSnippets": [
+        {
+          "label": "Daily quest prototype",
+          "body": {
+            "availability": "daily",
+            "difficulty": "easy",
+            "title": "Quest title",
+            "icon": "minecraft:book",
+            "condition": { "type": "polyquest:advancement_criterion", "trigger": "minecraft:player_killed_entity", "conditions": {} },
+            "rewards": { "rewards": [{ "type": "polyquest:experience", "points": 10 }] }
+          }
+        },
+        {
+          "label": "Unique quest prototype",
+          "body": {
+            "availability": "unique",
+            "title": "Quest title",
+            "icon": "minecraft:book",
+            "condition": { "type": "polyquest:obtain_advancement", "advancement": "minecraft:story/mine_stone" },
+            "rewards": { "rewards": [{ "type": "polyquest:experience", "points": 10 }] }
+          }
+        },
+        {
+          "label": "Nested template invocation",
+          "body": { "template": "example:base_quest", "arguments": {} }
+        }
+      ],
+      "additionalProperties": true
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "conditionHint": {
+      "description": "Editor suggestions for PolyQuest conditions. Dynamic markers and future condition fields are allowed here; the expanded quest receives full validation.",
+      "properties": {
+        "type": {
+          "description": "Condition type, or a whole-value parameter marker.",
+          "examples": [
+            "polyquest:advancement_criterion", "polyquest:consume_items", "polyquest:loot_item",
+            "polyquest:obtain_advancement", "polyquest:explicit_signal", "polyquest:all_of",
+            "polyquest:any_of", "polyquest:repeat", "polyquest:sequence", "polyquest:time_window",
+            "polyquest:n_of_m", "polyquest:optional", "polyquest:choice", "${condition_type}"
+          ]
+        },
+        "trigger": { "description": "Minecraft advancement trigger identifier.", "examples": ["minecraft:player_killed_entity"] },
+        "conditions": { "description": "Trigger-specific Minecraft predicate object; deliberately unrestricted.", "additionalProperties": true },
+        "item": { "description": "Minecraft item predicate, or ${item} for a whole-value substitution.", "properties": { "items": {}, "count": {}, "components": {}, "predicates": {} }, "additionalProperties": true },
+        "entity": { "description": "Minecraft entity predicate or a whole-value parameter marker.", "additionalProperties": true },
+        "count": { "description": "Required number of matching events or items.", "examples": [1, "${count}"] },
+        "advancement": { "description": "Advancement identifier to complete.", "examples": ["minecraft:story/mine_stone", "${advancement}"] },
+        "signal": { "description": "PolyQuest integration signal identifier.", "examples": ["example:quest_signal", "${signal}"] },
+        "children": { "description": "Nested conditions, or a whole-value parameter marker.", "items": { "$ref": "#/$defs/conditionHint" } },
+        "child": { "$ref": "#/$defs/conditionHint" },
+        "times": { "description": "Repeat count.", "examples": [2, "${times}"] },
+        "duration_ticks": { "description": "Time-window duration in server ticks.", "examples": [1200, "${duration_ticks}"] },
+        "start_policy": { "examples": ["immediate", "first_progress", "start_condition", "${start_policy}"] },
+        "start_condition": { "$ref": "#/$defs/conditionHint" },
+        "timeout_action": { "examples": ["reset", "exhaust", "${timeout_action}"] },
+        "max_attempts": { "examples": [0, "${max_attempts}"] },
+        "required": { "description": "Number of branches required by n_of_m.", "examples": [2, "${required}"] },
+        "branches": { "items": { "properties": { "name": {}, "condition": { "$ref": "#/$defs/conditionHint" } }, "additionalProperties": true } }
+      },
+      "defaultSnippets": [
+        { "label": "Advancement criterion", "body": { "type": "polyquest:advancement_criterion", "trigger": "minecraft:player_killed_entity", "conditions": {} } },
+        { "label": "Obtain advancement", "body": { "type": "polyquest:obtain_advancement", "advancement": "minecraft:story/mine_stone" } },
+        { "label": "Consume items", "body": { "type": "polyquest:consume_items", "item": { "items": "minecraft:stone" }, "count": 1 } },
+        { "label": "All conditions", "body": { "type": "polyquest:all_of", "children": [{ "type": "polyquest:advancement_criterion", "trigger": "minecraft:tick" }] } }
+      ],
+      "additionalProperties": true
+    },
+    "rewardPlanHint": {
+      "description": "Reward-profile reference or inline rewards. Whole-value parameter markers are allowed.",
+      "properties": {
+        "profile": { "description": "Reward profile identifier.", "examples": ["example:daily_easy", "${reward_profile}"] },
+        "rewards": { "description": "Inline rewards, or a whole-value parameter marker.", "items": { "$ref": "#/$defs/rewardHint" } }
+      },
+      "defaultSnippets": [
+        { "label": "Reward profile", "body": { "profile": "example:daily_easy" } },
+        { "label": "Inline experience", "body": { "rewards": [{ "type": "polyquest:experience", "points": 10 }] } }
+      ],
+      "additionalProperties": true
+    },
+    "rewardHint": {
+      "description": "Editor suggestions for inline rewards; parameter substitutions are validated after expansion.",
+      "properties": {
+        "type": { "examples": ["polyquest:money", "polyquest:item", "polyquest:experience", "polyquest:commands", "${reward_type}"] },
+        "amount": { "description": "Positive integer encoded as a string for a money reward.", "examples": ["10", "${amount}"] },
+        "formatted_amount": { "examples": ["10 coins", "${formatted_amount}"] },
+        "currency": { "examples": ["example:coin", "${currency}"] },
+        "stack": { "description": "Minecraft item stack template or whole-value parameter marker.", "properties": { "id": {}, "count": {}, "components": {} }, "additionalProperties": true },
+        "points": { "description": "Experience points.", "examples": [10, "${points}"] },
+        "title": { "description": "Player-facing title for a command reward.", "examples": ["Bonus reward"] },
+        "commands": { "description": "Server commands to run, or a whole-value parameter marker.", "items": {} }
+      },
+      "additionalProperties": true
+    }
+  }
 }

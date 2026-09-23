@@ -120,7 +120,7 @@ final class QuestCommandTextTest {
                 Items.BOOK, new BuiltInConditions.ExplicitSignal(id, 1),
                 new RewardApi.Plan(Optional.empty(), List.of()), "hash");
         return new QuestModel.Occurrence(
-                new QuestModel.Key(id, new QuestModel.DailyScope(LocalDate.of(2026, 9, 23), difficulty, 0)),
+                new QuestModel.Key(id, new QuestModel.DailyScope(difficulty, Instant.parse("2026-09-24T00:00:00Z"))),
                 definition, Instant.EPOCH, Optional.empty());
     }
 }

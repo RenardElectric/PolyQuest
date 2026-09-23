@@ -10,7 +10,6 @@ import polycube.polyquest.condition.ConditionApi;
 import polycube.polyquest.reward.RewardApi;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.*;
 
 /// Immutable quest definitions and occurrence identities.
@@ -110,10 +109,10 @@ public final class QuestModel {
         String serialized();
     }
 
-    public record DailyScope(LocalDate date, Difficulty slot, int generation) implements Scope {
+    public record DailyScope(Difficulty slot, Instant nextRoll) implements Scope {
         @Override
         public String serialized() {
-            return "daily:" + date + ':' + slot.getSerializedName() + ':' + generation;
+            return "daily:" + slot.getSerializedName() + ':' + nextRoll.toEpochMilli();
         }
     }
 
@@ -148,7 +147,7 @@ public final class QuestModel {
         }
     }
 
-    public record DailyAssignment(LocalDate date, Map<Difficulty, Occurrence> slots) {
+    public record DailyAssignment(Map<Difficulty, Occurrence> slots) {
         public DailyAssignment {
             EnumMap<Difficulty, Occurrence> copy = new EnumMap<>(Difficulty.class);
             copy.putAll(slots);

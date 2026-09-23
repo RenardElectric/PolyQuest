@@ -26,7 +26,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/// Loads and compiles the complete PolyQuest datapack module behind one interface.
+/// Loads the effective datapack resources and compiles valid definitions with per-file diagnostics.
 final class QuestResourceCompiler {
     private static final FileToIdConverter QUEST_FILES = FileToIdConverter.json("quests");
     private static final FileToIdConverter TEMPLATE_FILES = FileToIdConverter.json("quest_templates");
@@ -60,7 +60,7 @@ final class QuestResourceCompiler {
         validator = new QuestDefinitionValidator(registries);
     }
 
-    /// Uses Mojang's effective resource view, then compiles one transactional catalog candidate.
+    /// Uses Mojang's effective resource view and reports unusable resources without hiding valid ones.
     DataResult<QuestModel.Catalog> compile(ResourceManager manager, DynamicOps<JsonElement> ops) {
         List<String> errors = new ArrayList<>();
         ResourceSet resources = new ResourceSet(
@@ -76,9 +76,7 @@ final class QuestResourceCompiler {
         return compile(resources, ops, new ArrayList<>());
     }
 
-    private DataResult<QuestModel.Catalog> compile(
-            ResourceSet resources, DynamicOps<JsonElement> ops, List<String> errors
-    ) {
+    private DataResult<QuestModel.Catalog> compile(ResourceSet resources, DynamicOps<JsonElement> ops, List<String> errors) {
         Map<Identifier, Template> templates = decodeResources(
                 resources.templates(), TEMPLATE_CODEC,
                 ops, "Quest template", errors
@@ -90,20 +88,28 @@ final class QuestResourceCompiler {
         Map<Identifier, RewardApi.Profile> profiles = new TreeMap<>();
         profileResources.forEach((id, rewards) -> {
             RewardApi.Profile profile = new RewardApi.Profile(id, rewards);
-            errors.addAll(validator.validate(profile));
-            profiles.put(id, profile);
+            var problems = validator.validate(profile);
+            if (problems.isEmpty()) profiles.put(id, profile);
+            else errors.addAll(problems);
         });
 
         Map<Identifier, QuestModel.Definition> quests = new TreeMap<>();
         for (var entry : new TreeMap<>(resources.quests()).entrySet()) {
             Identifier id = entry.getKey();
-            JsonObject expanded = expandQuest(id, entry.getValue(), templates, new ArrayDeque<>(), errors);
-            if (expanded == null) continue;
+            var questErrors = new ArrayList<String>();
+            var expanded = expandQuest(id, entry.getValue(), templates, new ArrayDeque<>(), questErrors);
+            if (expanded == null) {
+                errors.addAll(questErrors);
+                continue;
+            }
 
-            QuestModel.@Nullable Body body = decode(QuestModel.Body.CODEC.parse(ops, expanded), "Quest '" + id + "'", errors);
-            if (body == null) continue;
+            var body = decode(QuestModel.Body.CODEC.parse(ops, expanded), "Quest '" + id + "'", questErrors);
+            if (body == null) {
+                errors.addAll(questErrors);
+                continue;
+            }
 
-            JsonObject behavior = expanded.deepCopy();
+            var behavior = expanded.deepCopy();
             behavior.remove("title");
             behavior.remove("description");
             behavior.remove("icon");
@@ -118,17 +124,19 @@ final class QuestResourceCompiler {
                 }
             });
 
-            QuestModel.Definition definition = QuestModel.Definition.fromBody(id, body, hash(behavior));
-            errors.addAll(validator.validate(definition, profiles));
-            quests.put(id, definition);
+            var definition = QuestModel.Definition.fromBody(id, body, hash(behavior));
+            questErrors.addAll(validator.validate(definition, profiles));
+            if (questErrors.isEmpty()) quests.put(id, definition);
+            else errors.addAll(questErrors);
         }
 
+        var catalog = new QuestModel.Catalog(quests, profiles);
         return errors.isEmpty()
-                ? DataResult.success(new QuestModel.Catalog(quests, profiles))
-                : DataResult.error(() -> "PolyQuest catalog compilation failed:\n - " + String.join("\n - ", errors));
+                ? DataResult.success(catalog)
+                : DataResult.error(() -> "PolyQuest skipped invalid datapack resources:\n - " + String.join("\n - ", errors), catalog);
     }
 
-    /// Mirrors Mojang's JSON resource scan while retaining errors for all-or-nothing publication.
+    /// Mirrors Mojang's JSON resource scan while retaining errors for skipped resources.
     private static Map<Identifier, JsonElement> loadDirectory(
             ResourceManager manager, FileToIdConverter files, String kind, List<String> errors
     ) {

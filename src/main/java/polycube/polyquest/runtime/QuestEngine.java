@@ -121,15 +121,15 @@ public final class QuestEngine implements AutoCloseable {
     }
 
     /// Rebuilds availability and discards daily attempts whose occurrence is no longer active.
-    void rotationChanged() {
+    void rotationChanged(Set<QuestModel.Difficulty> resetSlots) {
         rebuildAvailableOccurrences();
         ledger.retainReadyCompletions(activeBehaviorHashes());
         Set<QuestModel.Key> activeKeys = rotation.current().slots().values().stream()
                 .map(QuestModel.Occurrence::key)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         sessions.values().forEach(session -> session.removeIf(attempt ->
-                attempt.occurrence().key().scope() instanceof QuestModel.DailyScope
-                        && !activeKeys.contains(attempt.occurrence().key())));
+                attempt.occurrence().key().scope() instanceof QuestModel.DailyScope scope
+                        && (resetSlots.contains(scope.slot()) || !activeKeys.contains(attempt.occurrence().key()))));
         activateOnlinePlayers();
     }
 
@@ -170,7 +170,7 @@ public final class QuestEngine implements AutoCloseable {
         Set<UUID> resets = new LinkedHashSet<>();
 
         for (QuestLedger.ReadyCompletion removed : ledger.retainReadyCompletions(activeBehaviorHashes())) {
-            if (behaviorChanged.stream().anyMatch(id -> removed.occurrenceKey().startsWith(id + "|"))) {
+            if (behaviorChanged.contains(removed.questId())) {
                 resets.add(removed.playerId());
             }
         }
@@ -211,10 +211,10 @@ public final class QuestEngine implements AutoCloseable {
         return ledger.isClaimed(playerId, key) || ledger.hasPending(playerId, key);
     }
 
-    private Map<String, String> activeBehaviorHashes() {
-        var active = new HashMap<String, String>();
+    private Map<Identifier, String> activeBehaviorHashes() {
+        var active = new HashMap<Identifier, String>();
         for (var occurrence : availableOccurrences) {
-            active.put(occurrence.key().persistentKey(), occurrence.definition().behaviorHash());
+            active.put(occurrence.definition().id(), occurrence.definition().behaviorHash());
         }
         return active;
     }

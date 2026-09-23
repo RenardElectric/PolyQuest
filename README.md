@@ -36,7 +36,7 @@ quest journal.
 
 | Functionality                    | What it means in-game                                                                                         |
 |----------------------------------|---------------------------------------------------------------------------------------------------------------|
-| **Complete daily quests**        | Each day can offer one easy, one medium and one hard quest shared by every player on the server.              |
+| **Complete rotating quests**     | One easy, one medium and one hard quest are shared by every player, each on its own schedule.                 |
 | **Take on unique quests**        | Permanent, one-time objectives never rotate, and each reward can be claimed once.                             |
 | **Progress through normal play** | Quests can react to item deliveries, fishing, combat, exploration, crafting, item use, advancements and more. |
 | **Follow multi-step objectives** | A quest can combine goals into sequences, choices, repeats, time limits and other composite challenges.       |
@@ -72,13 +72,13 @@ then see [Adding quests](#adding-quests).
 - The **Unique Quests** book opens the collection of permanent one-time objectives.
 - Quest icons show the title, objective, progress, reward, availability and claim status.
 - Click a completed, unclaimed quest to deliver any required items and receive the reward.
-- Daily quests expire at the next midnight in the server's configured time zone. Incomplete and
-  unclaimed daily progress is discarded when the rotation changes.
+- Each daily difficulty has a configurable rotation interval. Partial progress, unclaimed completions,
+  and unfinished reward deliveries for that slot are discarded when it rotates.
 - Unique quests never expire, and a successfully claimed reward cannot be claimed again.
 
 > [!IMPORTANT]
-> Quest attempt progress is not saved across server restarts. Successful claims, pending reward
-> deliveries and administrator rerolls are saved with the world.
+> Partial quest progress is not saved across server restarts. Completed but unclaimed current quests,
+> successful claims, pending rewards, and the current daily assignments are saved with the world.
 
 ## Quests and rewards
 
@@ -227,60 +227,67 @@ PolyQuest reads three JSON resource collections from enabled datapacks:
 | `data/<namespace>/quest_templates/`              | Reusable parameterized quest prototypes                        |
 | `data/<namespace>/reward_profiles/`              | Reusable reward lists                                          |
 
-Daily quests require an `easy`, `medium` or `hard` difficulty. PolyQuest deterministically selects one
-quest for each difficulty and rotates them at midnight in the configured time zone. Unique quests are
-permanent and have no difficulty.
+Daily quests require an `easy`, `medium` or `hard` difficulty. PolyQuest selects one quest for each
+difficulty and rotates each slot on its configured local-time schedule. Unique quests are permanent
+and have no difficulty.
 
 Use the [JSON schemas](schemas) as the authoritative field reference. For an
 `advancement_criterion`, the schema accepts any object under `conditions` because its fields depend on
 the selected Minecraft trigger; `/reload` still decodes and validates that object through Minecraft's
 criterion codec. A `polyquest:money` reward requires `amount`, `formatted_amount` and `currency`.
 
-Run vanilla `/reload` after changing resources. PolyQuest validates the entire candidate catalog before
-publishing it; if any quest, template or reward profile is invalid, the previous working catalog stays
-active and the errors are written to the server log.
+Run vanilla `/reload` after changing resources. Invalid quests, templates, and reward profiles are
+logged and skipped; valid resources still load. If an assigned daily quest disappears or becomes
+invalid, its slot immediately selects another eligible quest or becomes empty until one is available.
 
 ### Configuration
 
 PolyQuest creates `config/polyquest.json` with these server-wide settings:
 
-| Setting                     | Default              | Purpose                                                             |
-|-----------------------------|----------------------|---------------------------------------------------------------------|
-| `dailySeed`                 | Built-in stable seed | Changes the deterministic daily selections.                         |
-| `timeZone`                  | Host system zone     | Sets the local midnight used for daily rotation.                    |
-| `pendingRewardRetrySeconds` | `30`                 | Sets how often temporarily undeliverable rewards are retried.       |
+| Setting                     | Default                     | Purpose                                                       |
+|-----------------------------|-----------------------------|---------------------------------------------------------------|
+| `dailySeed`                 | Built-in stable seed        | Changes the deterministic daily selections.                   |
+| `timeZone`                  | Host system zone            | Sets the local clock and Monday anchor for rotation.          |
+| `rotationHours`             | Easy 12, medium 24, hard 48 | Sets each difficulty's independent refresh interval.          |
+| `pendingRewardRetrySeconds` | `30`                        | Sets how often temporarily undeliverable rewards are retried. |
 
 Use a Java/IANA time-zone ID such as `Europe/Zurich` for `timeZone`. Restart the server after editing
-the configuration file.
+the configuration file. `rotationHours` accepts positive whole hours that divide 24 or are multiples
+of 24, for example `{"easy": 2, "medium": 48, "hard": 168}`. Boundaries follow local wall-clock
+hours from a fixed Monday; a daylight-saving day can therefore last 23 or 25 real hours. A changed
+interval or timezone realigns affected slots immediately after restart.
 
 ### Administrative commands
 
-| Command                                  | What it does                                                                 |
-|------------------------------------------|------------------------------------------------------------------------------|
-| `/polyquest`                             | Show the installed PolyQuest version, author and description.                |
-| `/polyquest help`                        | List the commands available to the command source.                           |
-| `/polyquest gui`                         | Open your quest journal directly.                                            |
-| `/polyquest pnj [<pos> <yaw> <pitch>]`   | Spawn an immovable Quest Giver at you or at the supplied position.           |
-| `/polyquest list [player]`               | List available quests and their claim states for yourself or another player. |
-| `/polyquest inspect <quest> [player]`    | Show objective, reward, progress, occurrence and diagnostic details.         |
-| `/polyquest claim <quest> [player]`      | Claim a completed quest or retry a pending reward for an online player.      |
-| `/polyquest reset <quest> [player]`      | Reset a quest attempt and its claim state.                                   |
-| `/polyquest reroll [easy\|medium\|hard]` | Reroll one daily slot, or all three when the difficulty is omitted.          |
-| `/polyquest signal <id> [player]`        | Emit a configured explicit quest signal for one or more online players.      |
+| Command                                     | What it does                                                                 |
+|---------------------------------------------|------------------------------------------------------------------------------|
+| `/polyquest`                                | Show the installed PolyQuest version, author and description.                |
+| `/polyquest help`                           | List the commands available to the command source.                           |
+| `/polyquest gui`                            | Open your quest journal directly.                                            |
+| `/polyquest pnj [<pos> <yaw> <pitch>]`      | Spawn an immovable Quest Giver at you or at the supplied position.           |
+| `/polyquest list [player]`                  | List available quests and their claim states for yourself or another player. |
+| `/polyquest inspect <quest> [player]`       | Show objective, reward, progress, occurrence and diagnostic details.         |
+| `/polyquest claim <quest> [player]`         | Claim a completed quest or retry a pending reward for an online player.      |
+| `/polyquest reset <quest> [player]`         | Reset a quest attempt and its claim state.                                   |
+| `/polyquest reroll [difficulty] [quest_id]` | Reroll all slots, one difficulty, or select an eligible quest explicitly.    |
+| `/polyquest signal <id> [player]`           | Emit a configured explicit quest signal for one or more online players.      |
 
 All PolyQuest subcommands use Minecraft's **Gamemasters** permission level. Arguments provide tab
 completion where applicable.
 
 ### Stored data
 
-- Successfully claimed quest occurrences, pending reward transactions and daily reroll generations are
-  persistent world data under PolyQuest's `ledger` entry.
+- Current daily quest IDs and next-roll times, claimed current occurrences, unclaimed completions,
+  and unfinished transactions are persistent world data under PolyQuest's `ledger` entry.
+- Unclaimed completions store only each quest ID and behavior hash per player; the daily slot already
+  stores its difficulty and next-roll time.
 - Attempt progress is intentionally session-only and is lost when the server restarts.
-- Daily incomplete and ready-to-claim states are discarded when the configured date changes.
-- Online players are notified when the daily rotation changes; players who were away receive the
-  same clickable notice when they next join that day.
-- Quest reloads preserve completed claims and pending rewards. Cosmetic edits keep live progress;
-  behavior-changing edits reset progressed attempts and notify affected players.
+- Rotating one difficulty clears its attempts, unclaimed completions, claims, and unfinished
+  transactions. Already-granted rewards are not reversed; unique quests are unaffected.
+- Players receive one generic quest-change notice when assignments or active progress reset. Players
+  who were away receive the latest notice on join, not a backlog of missed rotations.
+- Cosmetic edits keep live progress; behavior-changing edits reset progressed attempts. Invalid or
+  removed daily quests are replaced from the remaining valid catalog.
 - Back up the world and configuration as usual before removing the mod or moving a save between
   incompatible versions.
 

@@ -150,12 +150,8 @@ public final class QuestCommandText {
         return copy("[Technical details]", "Quest: " + quest.id() + "\nOccurrence: " + occurrence.key().persistentKey());
     }
 
-    public static MutableComponent dailyRotation() {
-        return message().append("New daily quests are available at the Quest Giver.");
-    }
-
-    public static MutableComponent progressReset() {
-        return message().append(colored("Some quests were updated, so your progress was reset.", ChatFormatting.GRAY));
+    public static MutableComponent questChanged() {
+        return message().append("Quests changed.");
     }
 
     public static MutableComponent questCompleted(QuestModel.Occurrence occurrence, Component details) {

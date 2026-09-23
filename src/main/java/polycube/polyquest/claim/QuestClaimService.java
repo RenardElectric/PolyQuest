@@ -146,7 +146,7 @@ public final class QuestClaimService {
         return result;
     }
 
-    /// A pending daily reward may outlive its rotation; never project it onto a newer occurrence.
+    /// Projects a pending transaction only onto the exact occurrence that started it.
     private Optional<QuestModel.Occurrence> currentOccurrence(QuestLedger.PendingTransaction transaction) {
         return engine.findOccurrence(transaction.questId())
                 .filter(occurrence -> occurrence.key().persistentKey().equals(transaction.occurrenceKey()));

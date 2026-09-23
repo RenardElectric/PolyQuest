@@ -2,12 +2,13 @@ package polycube.polyquest.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import java.time.Instant;
-import java.time.LocalDate;
+import java.time.Clock;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
@@ -59,20 +60,20 @@ final class QuestLedgerTest {
     void unclaimedCompletionsSurviveWorldSaveAndReload() {
         UUID playerId = UUID.randomUUID();
         var saved = JsonParser.parseString("""
-                { "ready": [
-                  { "player": "%s", "occurrence": "polyquest_test:unique|unique", "behavior_hash": "v1",
-                    "diagnostic": "{\\\"type\\\":\\\"polyquest:advancement_criterion\\\",\\\"completed\\\":true}" },
-                  { "player": "%s", "occurrence": "polyquest_test:daily|daily:2026-09-19:easy:0", "behavior_hash": "v1" }
-                ] }
-                """.formatted(playerId, playerId));
+                { "ready": { "%s": {
+                    "polyquest_test:unique": "v1",
+                    "polyquest_test:daily": "v1"
+                } } }
+                """.formatted(playerId));
 
         QuestLedger loaded = QuestLedger.CODEC.parse(JsonOps.INSTANCE, saved).getOrThrow();
         var reloaded = QuestLedger.CODEC.encodeStart(JsonOps.INSTANCE, loaded).getOrThrow().getAsJsonObject();
 
         assertTrue(reloaded.has("ready"), "An unclaimed completion must remain durable across a restart");
-        assertEquals(2, reloaded.getAsJsonArray("ready").size());
-        reloaded.getAsJsonArray("ready").forEach(entry ->
-                assertFalse(entry.getAsJsonObject().has("diagnostic"), "Legacy diagnostics should not be saved again"));
+        var playerReady = reloaded.getAsJsonObject("ready").getAsJsonObject(playerId.toString());
+        assertEquals(2, playerReady.size());
+        assertTrue(playerReady.has("polyquest_test:unique"));
+        assertTrue(playerReady.has("polyquest_test:daily"));
     }
 
     @Test
@@ -102,10 +103,10 @@ final class QuestLedgerTest {
         QuestLedger ledger = new QuestLedger();
         ledger.markReady(playerId, before);
 
-        assertTrue(ledger.retainReadyCompletions(Map.of(before.key().persistentKey(), before.definition().behaviorHash())).isEmpty());
+        assertTrue(ledger.retainReadyCompletions(Map.of(before.definition().id(), before.definition().behaviorHash())).isEmpty());
         assertTrue(ledger.isReady(playerId, before));
         assertFalse(ledger.isReady(playerId, after));
-        assertEquals(1, ledger.retainReadyCompletions(Map.of(after.key().persistentKey(), after.definition().behaviorHash())).size());
+        assertEquals(1, ledger.retainReadyCompletions(Map.of(after.definition().id(), after.definition().behaviorHash())).size());
         assertFalse(ledger.isReady(playerId, before));
 
         ledger.markReady(playerId, after);
@@ -175,65 +176,84 @@ final class QuestLedgerTest {
         QuestModel.Key key = new QuestModel.Key(
                 id,
                 new QuestModel.DailyScope(
-                        LocalDate.of(2026, 9, 19),
                         QuestModel.Difficulty.HARD,
-                        3));
+                        Instant.parse("2026-09-28T00:00:00Z")));
 
         assertEquals(
-                "polyquest_test:daily_identity|daily:2026-09-19:hard:3",
+                "polyquest_test:daily_identity|daily:hard:1790553600000",
                 key.persistentKey());
     }
 
     @Test
-    void rerollingMissingDifficultyDoesNotMutateGeneration() {
+    void rerollingMissingDifficultyDoesNotChangeTheSavedSlot() {
         QuestLedger ledger = new QuestLedger();
         DailyRotationService rotation = new DailyRotationService(
-                new QuestConfig(1L, ZoneId.of("UTC"), 30));
+                config(), Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("UTC")));
+        rotation.refresh(QuestModel.Catalog.EMPTY, ledger);
+        var before = ledger.rotationSlot(QuestModel.Difficulty.EASY);
 
-        assertFalse(rotation.reroll(QuestModel.Difficulty.EASY, QuestModel.Catalog.EMPTY, ledger));
-        assertEquals(0, ledger.rotationGeneration(QuestModel.Difficulty.EASY));
+        assertEquals(DailyRotationService.RerollResult.NO_CANDIDATES,
+                rotation.reroll(QuestModel.Difficulty.EASY, Optional.empty(), QuestModel.Catalog.EMPTY, ledger));
+        assertEquals(before, ledger.rotationSlot(QuestModel.Difficulty.EASY));
     }
 
     @Test
-    void rotationRefreshDistinguishesAChangedDateFromARepeatedCheck() {
+    void emptyRotationStoresDeadlinesWithoutAnnouncingChanges() {
         QuestLedger ledger = new QuestLedger();
         DailyRotationService rotation = new DailyRotationService(
-                new QuestConfig(1L, ZoneId.of("UTC"), 30));
+                config(), Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("UTC")));
 
         DailyRotationService.RefreshResult first = rotation.refresh(QuestModel.Catalog.EMPTY, ledger);
         DailyRotationService.RefreshResult repeated = rotation.refresh(QuestModel.Catalog.EMPTY, ledger);
 
-        assertTrue(first.dateChanged());
-        assertTrue(first.assignmentChanged());
-        assertFalse(repeated.dateChanged());
+        assertFalse(first.assignmentChanged());
         assertFalse(repeated.assignmentChanged());
+        assertEquals("2026-09-21T12:00:00Z", ledger.rotationSlot(QuestModel.Difficulty.EASY)
+                .orElseThrow().nextRoll().orElseThrow());
     }
 
     @Test
-    void rotationCacheRebuildsAfterARerollGenerationChanges() {
+    void rerollClearsOldDailyStateAndAvoidsThePreviousQuest() {
         QuestLedger ledger = new QuestLedger();
-        DailyRotationService rotation = new DailyRotationService(new QuestConfig(1L, ZoneId.of("UTC"), 30));
-        Identifier id = Identifier.fromNamespaceAndPath("polyquest_test", "daily_reroll");
-        QuestModel.Definition daily = new QuestModel.Definition(
-                id, QuestModel.Availability.DAILY, Optional.of(QuestModel.Difficulty.EASY),
-                "Daily", List.of(), Items.SUNFLOWER,
-                new BuiltInConditions.ExplicitSignal(id, 1),
-                new RewardApi.Plan(Optional.empty(), List.of()), "behavior");
-        QuestModel.Catalog catalog = new QuestModel.Catalog(Map.of(id, daily), Map.of());
-
+        DailyRotationService rotation = new DailyRotationService(config(),
+                Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("UTC")));
+        QuestModel.Definition first = daily("first");
+        QuestModel.Definition second = daily("second");
+        var unique = occurrence("unrelated_unique_ready");
+        QuestModel.Catalog catalog = new QuestModel.Catalog(
+                Map.of(first.id(), first, second.id(), second, unique.definition().id(), unique.definition()), Map.of());
         rotation.refresh(catalog, ledger);
-        assertFalse(rotation.refresh(catalog, ledger).assignmentChanged());
-        ledger.incrementRotationGeneration(QuestModel.Difficulty.EASY);
-        assertTrue(rotation.refresh(catalog, ledger).assignmentChanged());
-        var scope = (QuestModel.DailyScope) rotation.current().slots().get(QuestModel.Difficulty.EASY).key().scope();
-        assertEquals(1, scope.generation());
+        var before = rotation.current().slots().get(QuestModel.Difficulty.EASY);
+        UUID player = UUID.randomUUID();
+        ledger.markReady(player, before);
+        ledger.markReady(player, unique);
+        var pending = ledger.beginClaim(player, before, List.of());
+        ledger.markCostsCommitted(pending);
+        ledger.markRotationNotified(player);
+
+        assertEquals(DailyRotationService.RerollResult.CHANGED,
+                rotation.reroll(QuestModel.Difficulty.EASY, Optional.empty(), catalog, ledger));
+        var after = rotation.current().slots().get(QuestModel.Difficulty.EASY);
+        assertFalse(before.definition().id().equals(after.definition().id()));
+        assertFalse(ledger.isReady(player, before));
+        assertTrue(ledger.isReady(player, unique));
+        assertTrue(ledger.pendingFor(player).isEmpty());
+        assertTrue(ledger.markRotationNotified(player));
+        assertEquals(before.availableUntil(), after.availableUntil());
+
+        assertEquals(DailyRotationService.RerollResult.CHANGED,
+                rotation.reroll(QuestModel.Difficulty.EASY, Optional.of(before.definition().id()), catalog, ledger));
+        assertFalse(ledger.isClaimed(player, rotation.current().slots().get(QuestModel.Difficulty.EASY).key()));
     }
 
     @Test
-    void rotationNotificationReceiptPersistsAndClearsForTheNextDate() {
+    void rotationNotificationReceiptPersistsUntilAChange() {
         QuestLedger ledger = new QuestLedger();
         UUID playerId = UUID.randomUUID();
-        ledger.beginRotation(LocalDate.of(2026, 9, 19));
+        assertFalse(ledger.markRotationNotified(playerId));
+        ledger.setRotationSlot(QuestModel.Difficulty.EASY, Optional.empty(), Instant.parse("2026-09-22T00:00:00Z"), false);
+        assertFalse(ledger.markRotationNotified(playerId));
+        ledger.setRotationSlot(QuestModel.Difficulty.EASY, Optional.empty(), Instant.parse("2026-09-22T00:00:00Z"), true);
 
         assertTrue(ledger.markRotationNotified(playerId));
         assertFalse(ledger.markRotationNotified(playerId));
@@ -242,8 +262,205 @@ final class QuestLedgerTest {
         QuestLedger reloaded = QuestLedger.CODEC.parse(NbtOps.INSTANCE, encoded).getOrThrow();
         assertFalse(reloaded.markRotationNotified(playerId));
 
-        reloaded.beginRotation(LocalDate.of(2026, 9, 20));
+        reloaded.setRotationSlot(QuestModel.Difficulty.EASY, Optional.empty(), Instant.parse("2026-09-23T00:00:00Z"), true);
         assertTrue(reloaded.markRotationNotified(playerId));
+    }
+
+    @Test
+    void emptySlotChangeStillLeavesAnOfflineCatchupNoticeAfterReload() {
+        QuestLedger ledger = new QuestLedger();
+        ledger.setRotationSlot(QuestModel.Difficulty.EASY, Optional.empty(),
+                Instant.parse("2026-09-22T00:00:00Z"), true);
+
+        var encoded = QuestLedger.CODEC.encodeStart(NbtOps.INSTANCE, ledger).getOrThrow();
+        QuestLedger reloaded = QuestLedger.CODEC.parse(NbtOps.INSTANCE, encoded).getOrThrow();
+        UUID absentPlayer = UUID.randomUUID();
+        assertTrue(reloaded.markRotationNotified(absentPlayer));
+        assertFalse(reloaded.markRotationNotified(absentPlayer));
+    }
+
+    @Test
+    void localScheduleKeepsEvenHoursAndWeeklyMondaysAcrossDaylightSaving() {
+        ZoneId zone = ZoneId.of("Europe/Zurich");
+        QuestConfig config = new QuestConfig(1L, zone, Map.of(
+                QuestModel.Difficulty.EASY, 2,
+                QuestModel.Difficulty.HARD, 168));
+        QuestLedger ledger = new QuestLedger();
+        new DailyRotationService(config, Clock.fixed(Instant.parse("2026-09-21T10:30:00Z"), zone))
+                .refresh(QuestModel.Catalog.EMPTY, ledger);
+
+        assertEquals("2026-09-21T12:00:00Z", ledger.rotationSlot(QuestModel.Difficulty.EASY)
+                .orElseThrow().nextRoll().orElseThrow());
+        assertEquals("2026-09-27T22:00:00Z", ledger.rotationSlot(QuestModel.Difficulty.HARD)
+                .orElseThrow().nextRoll().orElseThrow());
+
+        QuestConfig daily = new QuestConfig(1L, zone, Map.of(QuestModel.Difficulty.EASY, 24));
+        QuestLedger spring = new QuestLedger();
+        new DailyRotationService(daily, Clock.fixed(Instant.parse("2026-03-28T23:30:00Z"), zone))
+                .refresh(QuestModel.Catalog.EMPTY, spring);
+        assertEquals("2026-03-29T22:00:00Z", spring.rotationSlot(QuestModel.Difficulty.EASY)
+                .orElseThrow().nextRoll().orElseThrow());
+
+        QuestLedger autumn = new QuestLedger();
+        new DailyRotationService(daily, Clock.fixed(Instant.parse("2026-10-24T22:30:00Z"), zone))
+                .refresh(QuestModel.Catalog.EMPTY, autumn);
+        assertEquals("2026-10-25T23:00:00Z", autumn.rotationSlot(QuestModel.Difficulty.EASY)
+                .orElseThrow().nextRoll().orElseThrow());
+    }
+
+    @Test
+    void scheduledBoundaryStartsFreshQuestWithoutRepeatingAnAlternative() {
+        QuestLedger ledger = new QuestLedger();
+        QuestModel.Definition first = daily("schedule_first");
+        QuestModel.Definition second = daily("schedule_second");
+        QuestModel.Catalog catalog = new QuestModel.Catalog(Map.of(first.id(), first, second.id(), second), Map.of());
+        var beforeRotation = new DailyRotationService(config(),
+                Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("UTC")));
+        beforeRotation.refresh(catalog, ledger);
+        QuestModel.Occurrence before = beforeRotation.current().slots().get(QuestModel.Difficulty.EASY);
+        UUID player = UUID.randomUUID();
+        ledger.markReady(player, before);
+
+        var afterRotation = new DailyRotationService(config(),
+                Clock.fixed(Instant.parse("2026-09-21T12:00:00Z"), ZoneId.of("UTC")));
+        var result = afterRotation.refresh(catalog, ledger);
+        QuestModel.Occurrence after = afterRotation.current().slots().get(QuestModel.Difficulty.EASY);
+
+        assertTrue(result.resetSlots().contains(QuestModel.Difficulty.EASY));
+        assertNotEquals(before.definition().id(), after.definition().id());
+        assertFalse(ledger.isReady(player, before));
+        assertNotEquals(before.key(), after.key());
+    }
+
+    @Test
+    void removedQuestClearsItsSlotAndIsReplacedWhenCandidatesReturn() {
+        QuestLedger ledger = new QuestLedger();
+        QuestModel.Definition removed = daily("removed");
+        QuestModel.Definition replacement = daily("replacement");
+        Clock now = Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("UTC"));
+        DailyRotationService rotation = new DailyRotationService(config(), now);
+        rotation.refresh(new QuestModel.Catalog(Map.of(removed.id(), removed), Map.of()), ledger);
+        var original = rotation.current().slots().get(QuestModel.Difficulty.EASY);
+        UUID player = UUID.randomUUID();
+        ledger.markReady(player, original);
+
+        assertTrue(rotation.refresh(QuestModel.Catalog.EMPTY, ledger).assignmentChanged());
+        assertFalse(rotation.current().slots().containsKey(QuestModel.Difficulty.EASY));
+        assertFalse(ledger.isReady(player, original));
+        assertTrue(ledger.rotationSlot(QuestModel.Difficulty.EASY).orElseThrow().quest().isEmpty());
+
+        var restored = new QuestModel.Catalog(Map.of(replacement.id(), replacement), Map.of());
+        assertTrue(rotation.refresh(restored, ledger).assignmentChanged());
+        assertEquals(replacement.id(), rotation.current().slots().get(QuestModel.Difficulty.EASY).definition().id());
+        assertEquals(original.availableUntil(), rotation.current().slots().get(QuestModel.Difficulty.EASY).availableUntil());
+    }
+
+    @Test
+    void oneCandidateRerollResetsStateEvenThoughTheOccurrenceKeyIsUnchanged() {
+        QuestLedger ledger = new QuestLedger();
+        QuestModel.Definition only = daily("only");
+        QuestModel.Catalog catalog = new QuestModel.Catalog(Map.of(only.id(), only), Map.of());
+        DailyRotationService rotation = new DailyRotationService(config(),
+                Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("UTC")));
+        rotation.refresh(catalog, ledger);
+        var occurrence = rotation.current().slots().get(QuestModel.Difficulty.EASY);
+        UUID player = UUID.randomUUID();
+        ledger.complete(ledger.beginClaim(player, occurrence, List.of()));
+
+        assertEquals(DailyRotationService.RerollResult.CHANGED,
+                rotation.reroll(QuestModel.Difficulty.EASY, Optional.empty(), catalog, ledger));
+        assertEquals(occurrence.key(), rotation.current().slots().get(QuestModel.Difficulty.EASY).key());
+        assertFalse(ledger.isClaimed(player, occurrence.key()));
+    }
+
+    @Test
+    void restoredDailyAssignmentsRequireAnEngineRefreshAfterWorldReopen() {
+        QuestModel.Definition daily = daily("reopen_visible");
+        QuestModel.Catalog catalog = new QuestModel.Catalog(Map.of(daily.id(), daily), Map.of());
+        Clock now = Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("UTC"));
+        QuestLedger originalLedger = new QuestLedger();
+        DailyRotationService originalRotation = new DailyRotationService(config(), now);
+        originalRotation.refresh(catalog, originalLedger);
+        assertTrue(originalRotation.current().slots().containsKey(QuestModel.Difficulty.EASY));
+        UUID player = UUID.randomUUID();
+        originalLedger.markReady(player, originalRotation.current().slots().get(QuestModel.Difficulty.EASY));
+
+        var saved = QuestLedger.CODEC.encodeStart(NbtOps.INSTANCE, originalLedger).getOrThrow();
+        QuestLedger loadedLedger = QuestLedger.CODEC.parse(NbtOps.INSTANCE, saved).getOrThrow();
+        DailyRotationService reopenedRotation = new DailyRotationService(config(), now);
+        var refresh = reopenedRotation.refresh(catalog, loadedLedger);
+
+        assertEquals(daily.id(), reopenedRotation.current().slots().get(QuestModel.Difficulty.EASY).definition().id());
+        assertTrue(refresh.assignmentChanged(), "The engine must rebuild availability after restoring saved slots");
+        assertTrue(refresh.resetSlots().isEmpty(), "Restoring unchanged slots must not erase progress or notify players");
+        assertTrue(loadedLedger.isReady(player, reopenedRotation.current().slots().get(QuestModel.Difficulty.EASY)));
+        assertFalse(reopenedRotation.refresh(catalog, loadedLedger).assignmentChanged());
+    }
+
+    @Test
+    void changedIntervalOrMalformedSavedSlotReplacesItImmediately() {
+        QuestLedger ledger = new QuestLedger();
+        QuestModel.Definition only = daily("current");
+        QuestModel.Catalog catalog = new QuestModel.Catalog(Map.of(only.id(), only), Map.of());
+        Clock now = Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("UTC"));
+        DailyRotationService original = new DailyRotationService(config(), now);
+        original.refresh(catalog, ledger);
+        var oldOccurrence = original.current().slots().get(QuestModel.Difficulty.EASY);
+        UUID player = UUID.randomUUID();
+        ledger.markReady(player, oldOccurrence);
+
+        QuestConfig changed = new QuestConfig(1L, ZoneId.of("UTC"),
+                Map.of(QuestModel.Difficulty.EASY, 24));
+        var restarted = new DailyRotationService(changed, now);
+        assertTrue(restarted.refresh(catalog, ledger).assignmentChanged());
+        assertFalse(ledger.isReady(player, oldOccurrence));
+        assertEquals("2026-09-22T00:00:00Z", ledger.rotationSlot(QuestModel.Difficulty.EASY)
+                .orElseThrow().nextRoll().orElseThrow());
+
+        QuestLedger malformed = QuestLedger.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("""
+                { "rotation": { "easy": { "quest": "bad id", "next_roll": "not a time" } } }
+                """)).getOrThrow();
+        assertTrue(new DailyRotationService(changed, now).refresh(catalog, malformed).assignmentChanged());
+        assertEquals(Optional.of(only.id().toString()), malformed.rotationSlot(QuestModel.Difficulty.EASY)
+                .orElseThrow().quest());
+    }
+
+    @Test
+    void returningToClaimedQuestWithinOneFrameIsASeparateOpportunity() {
+        QuestLedger ledger = new QuestLedger();
+        QuestModel.Definition first = daily("claimed_first");
+        QuestModel.Definition second = daily("claimed_second");
+        QuestModel.Catalog catalog = new QuestModel.Catalog(Map.of(first.id(), first, second.id(), second), Map.of());
+        DailyRotationService rotation = new DailyRotationService(config(),
+                Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("UTC")));
+        rotation.refresh(catalog, ledger);
+        var original = rotation.current().slots().get(QuestModel.Difficulty.EASY);
+        UUID player = UUID.randomUUID();
+        ledger.complete(ledger.beginClaim(player, original, List.of()));
+        assertTrue(ledger.isClaimed(player, original.key()));
+
+        Identifier other = original.definition().id().equals(first.id()) ? second.id() : first.id();
+        assertEquals(DailyRotationService.RerollResult.CHANGED,
+                rotation.reroll(QuestModel.Difficulty.EASY, Optional.of(other), catalog, ledger));
+        assertEquals(DailyRotationService.RerollResult.CHANGED,
+                rotation.reroll(QuestModel.Difficulty.EASY, Optional.of(original.definition().id()), catalog, ledger));
+        var returned = rotation.current().slots().get(QuestModel.Difficulty.EASY);
+        assertEquals(original.key(), returned.key());
+        assertFalse(ledger.isClaimed(player, returned.key()));
+        assertEquals(DailyRotationService.RerollResult.ALREADY_SELECTED,
+                rotation.reroll(QuestModel.Difficulty.EASY, Optional.of(original.definition().id()), catalog, ledger));
+    }
+
+    private static QuestConfig config() {
+        return new QuestConfig(1L, ZoneId.of("UTC"), Map.of());
+    }
+
+    private static QuestModel.Definition daily(String path) {
+        Identifier id = Identifier.fromNamespaceAndPath("polyquest_test", path);
+        return new QuestModel.Definition(id, QuestModel.Availability.DAILY,
+                Optional.of(QuestModel.Difficulty.EASY), path, List.of(), Items.SUNFLOWER,
+                new BuiltInConditions.ExplicitSignal(id, 1),
+                new RewardApi.Plan(Optional.empty(), List.of()), "behavior");
     }
 
     private static QuestModel.Occurrence occurrence(String path) {

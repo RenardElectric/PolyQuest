@@ -72,6 +72,30 @@ final class QuestResourceCompilerTest {
     }
 
     @Test
+    void invalidQuestIsSkippedWithoutDiscardingValidQuests() {
+        Identifier validId = Identifier.fromNamespaceAndPath("test", "valid_daily");
+        Identifier invalidId = Identifier.fromNamespaceAndPath("test", "invalid_daily");
+        QuestResourceCompiler.ResourceSet resources = new QuestResourceCompiler.ResourceSet(
+                Map.of(validId, JsonParser.parseString("""
+                                { "availability": "daily", "difficulty": "easy", "title": "Valid",
+                                  "icon": "minecraft:stone",
+                                  "condition": { "type": "polyquest:explicit_signal", "signal": "test:done" },
+                                  "rewards": { "rewards": [{ "type": "polyquest:experience", "points": 1 }] } }
+                                """),
+                        invalidId, new JsonArray()),
+                Map.of(), Map.of());
+
+        var result = new QuestResourceCompiler().compile(resources,
+                RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY)
+                        .createSerializationContext(JsonOps.INSTANCE));
+
+        assertTrue(result.error().orElseThrow().message().contains("invalid_daily"));
+        QuestModel.Catalog usable = result.error().orElseThrow().partialValue().orElseThrow();
+        assertTrue(usable.quests().containsKey(validId));
+        assertFalse(usable.quests().containsKey(invalidId));
+    }
+
+    @Test
     void undeclaredTemplatePlaceholderRejectsCatalog() {
         QuestResourceCompiler.ResourceSet resources = new QuestResourceCompiler.ResourceSet(
                 Map.of(Identifier.fromNamespaceAndPath("test", "quest"), JsonParser.parseString("""

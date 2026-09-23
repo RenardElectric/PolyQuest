@@ -51,7 +51,7 @@ public final class PolyQuestApi {
 
     /// Rerolls the daily quest rotation for the given difficulties, if the quest manager is installed.
     public static DataResult<Boolean> reroll(List<QuestModel.Difficulty> difficulties) {
-        return manager().map(questManager -> questManager.reroll(difficulties));
+        return manager().map(questManager -> !questManager.reroll(difficulties).isEmpty());
     }
 
     public static DataResult<QuestManager> reset(NameAndId player, Identifier questId) {

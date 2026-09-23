@@ -22,7 +22,6 @@ import java.util.*;
 /// Server-scoped facade used by Fabric callbacks, commands, and future UI adapters.
 public final class QuestManager {
     private final MinecraftServer server;
-    private final QuestConfig config;
     private final QuestCatalogManager catalogs;
     private final QuestLedger ledger;
     private final DailyRotationService rotation;
@@ -31,12 +30,9 @@ public final class QuestManager {
     private final QuestClaimService claims;
     private final QuestChangeNotifier questChanges = new QuestChangeNotifier();
     private final QuestCatalogManager.Subscription catalogSubscription;
-    private final Set<UUID> pendingResetNotifications = new HashSet<>();
-    private long nextRewardRetryTick;
 
     public QuestManager(MinecraftServer server, QuestConfig config, QuestCatalogManager catalogs) {
         this.server = server;
-        this.config = config;
         this.catalogs = catalogs;
         this.ledger = QuestLedger.load(server);
         this.rotation = new DailyRotationService(config);
@@ -64,28 +60,38 @@ public final class QuestManager {
             refreshRotationAndEngine();
         }
         publishProgress(engine.tick(tick));
-        if (tick >= nextRewardRetryTick) {
-            nextRewardRetryTick = tick + config.pendingRewardRetrySeconds() * 20L;
-            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                claims.retryPending(player, false);
-            }
-        }
     }
 
     public void signal(QuestSignal signal) {
         publishProgress(engine.onSignal(signal));
     }
 
-    public boolean reroll(List<QuestModel.Difficulty> difficulties) {
-        boolean changed = refreshRotation().assignmentChanged();
+    public Set<QuestModel.Difficulty> reroll(List<QuestModel.Difficulty> difficulties) {
+        var scheduled = refreshRotation().resetSlots();
+        var changed = EnumSet.noneOf(QuestModel.Difficulty.class);
         for (var difficulty : difficulties) {
-            changed |= rotation.reroll(difficulty, catalogs.current(), ledger);
+            if (rotation.reroll(difficulty, Optional.empty(), catalogs.current(), ledger) == DailyRotationService.RerollResult.CHANGED) {
+                changed.add(difficulty);
+            }
         }
-        if (changed) {
-            engine.rotationChanged();
-            questChanges.changed();
-        }
-        return changed;
+        var allChanges = EnumSet.noneOf(QuestModel.Difficulty.class);
+        allChanges.addAll(scheduled);
+        allChanges.addAll(changed);
+        publishRotation(allChanges);
+        return Set.copyOf(changed);
+    }
+
+    public DailyRotationService.RerollResult reroll(QuestModel.Difficulty difficulty, Identifier questId) {
+        var changed = EnumSet.noneOf(QuestModel.Difficulty.class);
+        changed.addAll(refreshRotation().resetSlots());
+        var result = rotation.reroll(difficulty, Optional.of(questId), catalogs.current(), ledger);
+        if (result == DailyRotationService.RerollResult.CHANGED) changed.add(difficulty);
+        publishRotation(changed);
+        return result;
+    }
+
+    public List<Identifier> dailyQuestIds(QuestModel.Difficulty difficulty) {
+        return catalogs.current().daily(difficulty).stream().map(QuestModel.Definition::id).toList();
     }
 
     public void onPlayerJoin(ServerPlayer player) {
@@ -94,10 +100,7 @@ public final class QuestManager {
         // Fabric JOIN runs before PlayerList indexes the player, so bind newly created criteria directly.
         advancementCriteria.rebind(player);
         claims.retryPending(player, false);
-        notifyDailyRotation(player);
-        if (pendingResetNotifications.remove(player.getUUID())) {
-            sendResetNotification(player);
-        }
+        notifyQuestChange(player);
         sendUnclaimedSummary(player);
     }
 
@@ -115,7 +118,6 @@ public final class QuestManager {
         engine.close();
         advancementCriteria.close();
         questChanges.clear();
-        pendingResetNotifications.clear();
     }
 
     /// Returns the list of quests currently available to the given player.
@@ -159,15 +161,15 @@ public final class QuestManager {
 
     private void onCatalogChanged(QuestCatalogManager.Update update) {
         DailyRotationService.RefreshResult rotationResult = refreshRotation();
-        for (var playerId : engine.onCatalogChanged(update)) {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerId);
-            if (player == null) {
-                pendingResetNotifications.add(playerId);
-            } else {
-                sendResetNotification(player);
-            }
+        if (rotationResult.assignmentChanged() || !rotationResult.resetSlots().isEmpty()) {
+            engine.rotationChanged(rotationResult.resetSlots());
         }
-        if (update.diff().hasChanges() || rotationResult.assignmentChanged()) questChanges.changed();
+        var resetPlayers = engine.onCatalogChanged(update);
+        if (!resetPlayers.isEmpty() && rotationResult.resetSlots().isEmpty()) ledger.clearRotationNotifications();
+        if (!rotationResult.resetSlots().isEmpty() || !resetPlayers.isEmpty()) notifyOnlinePlayers();
+        if (update.diff().hasChanges() || rotationResult.assignmentChanged() || !rotationResult.resetSlots().isEmpty()) {
+            questChanges.changed();
+        }
     }
 
     /// Converts a fake vanilla advancement award into the corresponding quest signal.
@@ -196,31 +198,34 @@ public final class QuestManager {
         return ledger.isClaimed(player.id(), key);
     }
 
-    /// Refreshes daily state and records exactly which players received the new-day notice.
     private DailyRotationService.RefreshResult refreshRotation() {
-        DailyRotationService.RefreshResult result = rotation.refresh(catalogs.current(), ledger);
-        if (result.dateChanged()) {
-            server.getPlayerList().getPlayers().forEach(this::notifyDailyRotation);
-        }
-        return result;
+        return rotation.refresh(catalogs.current(), ledger);
     }
 
     private void refreshRotationAndEngine() {
         var result = refreshRotation();
-        if (result.assignmentChanged()) {
-            engine.rotationChanged();
+        if (result.assignmentChanged() || !result.resetSlots().isEmpty()) {
+            engine.rotationChanged(result.resetSlots());
+            if (!result.resetSlots().isEmpty()) notifyOnlinePlayers();
             questChanges.changed();
         }
     }
 
-    private void notifyDailyRotation(ServerPlayer player) {
-        if (!rotation.current().slots().isEmpty() && ledger.markRotationNotified(player.getUUID())) {
-            player.sendSystemMessage(QuestCommandText.dailyRotation());
-        }
+    private void publishRotation(Set<QuestModel.Difficulty> resetSlots) {
+        if (resetSlots.isEmpty()) return;
+        engine.rotationChanged(resetSlots);
+        notifyOnlinePlayers();
+        questChanges.changed();
     }
 
-    private static void sendResetNotification(ServerPlayer player) {
-        player.sendSystemMessage(QuestCommandText.progressReset());
+    private void notifyOnlinePlayers() {
+        server.getPlayerList().getPlayers().forEach(this::notifyQuestChange);
+    }
+
+    private void notifyQuestChange(ServerPlayer player) {
+        if (ledger.markRotationNotified(player.getUUID())) {
+            player.sendSystemMessage(QuestCommandText.questChanged());
+        }
     }
 
     /// Announces only fresh ready transitions; reconnects get a current summary instead.

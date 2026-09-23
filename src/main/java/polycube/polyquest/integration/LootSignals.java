@@ -1,12 +1,16 @@
 package polycube.polyquest.integration;
 
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import org.jspecify.annotations.Nullable;
 import polycube.polyquest.runtime.QuestRuntime;
 import polycube.polyquest.signal.QuestSignal;
+import polycube.polyquest.signal.QuestSignal.BlockLootSource;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -54,22 +58,23 @@ public final class LootSignals {
             throw new IllegalStateException("Entity loot capture stack is unbalanced");
         }
         if (successful) {
-            emit(capture.player(), QuestSignal.LootOrigin.ENTITY, entity, capture.items());
+            emit(capture.player(), QuestSignal.LootOrigin.ENTITY, entity, null, capture.items());
         }
     }
 
     public static void emitFishingLoot(ServerPlayer player, FishingHook hook, Collection<ItemStack> items) {
-        emit(player, QuestSignal.LootOrigin.FISHING, hook, items);
+        emit(player, QuestSignal.LootOrigin.FISHING, hook, null, items);
     }
 
-    public static void emitBlockLoot(ServerPlayer player, Collection<ItemStack> items) {
-        emit(player, QuestSignal.LootOrigin.BLOCK, null, items);
+    public static void emitBlockLoot(ServerPlayer player, ServerLevel level, BlockState state, @Nullable BlockEntity blockEntity, Collection<ItemStack> items) {
+        emit(player, QuestSignal.LootOrigin.BLOCK, null, new BlockLootSource(level, state, blockEntity), items);
     }
 
     private static void emit(
             ServerPlayer player,
             QuestSignal.LootOrigin origin,
             @Nullable Entity sourceEntity,
+            @Nullable BlockLootSource sourceBlock,
             Collection<ItemStack> items
     ) {
         if (items.isEmpty()) {
@@ -80,6 +85,7 @@ public final class LootSignals {
                 player.level().getServer().getTickCount(),
                 origin,
                 sourceEntity,
+                sourceBlock,
                 List.copyOf(items))));
     }
 

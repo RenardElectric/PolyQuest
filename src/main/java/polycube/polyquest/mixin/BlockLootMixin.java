@@ -27,7 +27,7 @@ abstract class BlockLootMixin {
     ) {
         List<ItemStack> generated = Block.getDrops(state, level, pos, blockEntity, breaker, tool);
         if (breaker instanceof ServerPlayer player) {
-            LootSignals.emitBlockLoot(player, generated);
+            LootSignals.emitBlockLoot(player, level, state, blockEntity, generated);
         }
         return generated;
     }

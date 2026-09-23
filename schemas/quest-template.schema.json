@@ -98,6 +98,7 @@
         "display_name": { "description": "Optional player-facing objective label for advancement_criterion, consume_items or loot_item; supports template interpolation.", "examples": ["Kill a zombie while holding a sword", "${objective_name}"] },
         "item": { "description": "Minecraft item predicate, or ${item} for a whole-value substitution.", "properties": { "items": {}, "count": {}, "components": {}, "predicates": {} }, "additionalProperties": true },
         "entity": { "description": "Minecraft entity predicate or a whole-value parameter marker.", "additionalProperties": true },
+        "block": { "description": "Minecraft block predicate for loot_item, or a whole-value parameter marker.", "properties": { "blocks": {}, "state": {}, "nbt": {}, "components": {}, "predicates": {} }, "additionalProperties": true },
         "count": { "description": "Required number of matching events or items.", "examples": [1, "${count}"] },
         "advancement": { "description": "Advancement identifier to complete.", "examples": ["minecraft:story/mine_stone", "${advancement}"] },
         "signal": { "description": "PolyQuest integration signal identifier.", "examples": ["example:quest_signal", "${signal}"] },

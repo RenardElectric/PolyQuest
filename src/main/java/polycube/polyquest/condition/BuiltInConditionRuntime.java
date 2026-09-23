@@ -173,16 +173,23 @@ final class BuiltInConditionRuntime {
         }
 
         private boolean matchesSource(QuestSignal.LootGenerated loot) {
-            return definition.entity().map(predicate ->
-                    loot.origin() == QuestSignal.LootOrigin.ENTITY
-                            && predicate.matches(loot.player(), loot.sourceEntity()))
-                    .orElse(true);
+            if (definition.entity().isPresent()) {
+                return loot.origin() == QuestSignal.LootOrigin.ENTITY
+                        && definition.entity().orElseThrow().matches(loot.player(), loot.sourceEntity());
+            }
+            if (definition.block().isPresent()) {
+                return loot.origin() == QuestSignal.LootOrigin.BLOCK
+                        && loot.sourceBlock() != null
+                        && loot.sourceBlock().matches(definition.block().orElseThrow());
+            }
+            return true;
         }
 
         @Override
         public JsonObject diagnostic() {
             JsonObject result = super.diagnostic();
-            result.addProperty("source", definition.entity().isPresent() ? "entity" : "any");
+            result.addProperty("source", definition.entity().isPresent() ? "entity"
+                    : definition.block().isPresent() ? "block" : "any");
             return result;
         }
     }

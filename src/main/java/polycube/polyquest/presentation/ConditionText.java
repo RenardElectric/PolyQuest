@@ -180,7 +180,7 @@ public final class ConditionText {
     }
 
     private static String lootItem(BuiltInConditions.LootItem condition) {
-        String source = condition.entity().isPresent() ? " from a matching entity" : " from loot";
+        String source = condition.entity().isPresent() ? " from a matching entity" : condition.block().isPresent() ? " from a matching block" : " from loot";
         String repetitions = condition.count() > 1 ? " " + condition.count() + " times" : "";
         return "Loot " + itemTarget(condition.item()) + source + repetitions;
     }

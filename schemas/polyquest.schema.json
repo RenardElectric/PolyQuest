@@ -72,6 +72,32 @@
       "propertyNames": { "$ref": "#/$defs/identifier" },
       "additionalProperties": true
     },
+    "blockPredicate": {
+      "title": "Minecraft block predicate",
+      "description": "Decoded directly by Mojang's BlockPredicate codec and matched against the original broken block state and block entity.",
+      "type": "object",
+      "properties": {
+        "blocks": { "$ref": "#/$defs/registryReferenceSet" },
+        "state": {
+          "type": "object",
+          "description": "Block-state property names mapped to an exact value or string min/max bounds.",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "properties": { "min": { "type": "string" }, "max": { "type": "string" } },
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "nbt": { "type": "string", "description": "SNBT predicate for block-entity data." },
+        "components": { "$ref": "#/$defs/componentMap" },
+        "predicates": { "$ref": "#/$defs/componentPredicateMap" }
+      },
+      "additionalProperties": false
+    },
     "itemStackTemplate": {
       "title": "Minecraft item stack template",
       "description": "Decoded directly by Mojang's ItemStackTemplate codec. A bare item identifier is shorthand for a count of one.",
@@ -211,16 +237,18 @@
     },
     "lootItemCondition": {
       "title": "Loot a matching item",
-      "description": "Counts supported loot-generation events containing a matching item. With entity present, only death loot from a matching entity counts; without it, entity death, fishing and player-broken block loot count.",
+      "description": "Counts supported loot-generation events containing a matching item. entity limits the source to death loot; block limits it to player-broken block loot. Without either, entity death, fishing and player-broken block loot count.",
       "type": "object",
       "required": ["type", "item"],
       "properties": {
         "type": { "const": "polyquest:loot_item" },
         "item": { "$ref": "#/$defs/itemPredicate" },
         "entity": { "$ref": "#/$defs/entityPredicate" },
+        "block": { "$ref": "#/$defs/blockPredicate" },
         "count": { "type": "integer", "minimum": 1, "default": 1 },
         "display_name": { "type": "string", "pattern": "\\S", "description": "Optional objective label shown instead of the generated loot summary." }
       },
+      "not": { "required": ["entity", "block"] },
       "additionalProperties": false
     },
     "obtainAdvancementCondition": {

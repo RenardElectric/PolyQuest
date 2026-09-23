@@ -140,12 +140,26 @@ Use `polyquest:loot_item` for that case:
 }
 ```
 
-`count` is optional and defaults to `1`. It counts loot events, so one slain entity advances the
-condition at most once even if it produces several matching stacks. The nested item predicate can
-still use its own `count` bounds to constrain the size of a matching stack. Omit `entity` to accept
-the matching item from any supported source: entity death loot (including special and equipment
-drops), fishing loot, or a block broken by the player. PolyQuest observes Minecraft's finalized
-generated stacks; picking up an unrelated item from the ground does not count.
+For loot from a particular block, use `block` instead of `entity`:
+
+```json
+{
+  "type": "polyquest:loot_item",
+  "item": { "items": "minecraft:flint" },
+  "block": { "blocks": "minecraft:gravel" },
+  "count": 3
+}
+```
+
+The `block` object uses Minecraft's block predicate format, including block tags, `state`, `nbt`,
+`components`, and `predicates`. It checks the original block state and block entity at the time
+the player breaks it, even after the world position changes. `entity` and `block` cannot be used
+together. `count` is optional and defaults to `1`. It counts loot events, so one slain entity or
+broken block advances the condition at most once even if it produces several matching stacks. The
+nested item predicate can still use its own `count` bounds to constrain the size of a matching
+stack. Omit both source filters to accept the matching item from entity death loot (including
+special and equipment drops), fishing loot, or a block broken by the player. PolyQuest observes
+Minecraft's finalized generated stacks; picking up an unrelated item from the ground does not count.
 
 Objectives can be combined with `all_of`, `any_of`, `repeat`, `sequence`, `time_window`, `n_of_m`,
 `optional` and `choice` conditions. Server datapacks control the exact targets, counts and rules.

@@ -160,7 +160,7 @@ final class QuestSchemaTest {
         JsonObject lootItem = definitions.getAsJsonObject("lootItemCondition");
         assertObjectFields(
                 lootItem,
-                Set.of("type", "item", "entity", "count", "display_name"),
+                Set.of("type", "item", "entity", "block", "count", "display_name"),
                 Set.of("type", "item")
         );
         JsonObject lootProperties = lootItem.getAsJsonObject("properties");
@@ -168,6 +168,10 @@ final class QuestSchemaTest {
                 .getAsJsonObject("item").get("$ref").getAsString());
         assertEquals("#/$defs/entityPredicate", lootProperties
                 .getAsJsonObject("entity").get("$ref").getAsString());
+        assertEquals("#/$defs/blockPredicate", lootProperties
+                .getAsJsonObject("block").get("$ref").getAsString());
+        assertEquals(Set.of("entity", "block"), stringValues(lootItem
+                .getAsJsonObject("not").getAsJsonArray("required")));
         assertEquals(1, lootProperties.getAsJsonObject("count").get("default").getAsInt());
 
         Set<String> conditionReferences = new HashSet<>();

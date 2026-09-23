@@ -106,7 +106,12 @@ public final class QuestDefinitionValidator {
         switch (definition) {
             case BuiltInConditions.AdvancementCriterion value -> validateCriterion(value, path, errors);
             case BuiltInConditions.ConsumeItems value when value.count() <= 0 -> errors.add(path + ": count must be positive");
-            case BuiltInConditions.LootItem value when value.count() <= 0 -> errors.add(path + ": count must be positive");
+            case BuiltInConditions.LootItem value -> {
+                if (value.count() <= 0) errors.add(path + ": count must be positive");
+                if (value.entity().isPresent() && value.block().isPresent()) {
+                    errors.add(path + ": entity and block are mutually exclusive loot sources");
+                }
+            }
             case BuiltInConditions.ExplicitSignal value when value.count() <= 0 -> errors.add(path + ": count must be positive");
             case CompositeConditions.AllOf value -> validateChildren(value.children(), path, true, errors);
             case CompositeConditions.AnyOf value -> validateChildren(value.children(), path, true, errors);

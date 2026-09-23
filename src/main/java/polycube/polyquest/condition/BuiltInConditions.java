@@ -4,6 +4,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import net.minecraft.advancements.predicates.BlockPredicate;
 import net.minecraft.advancements.predicates.ItemPredicate;
 import net.minecraft.advancements.predicates.entity.EntityPredicate;
 import net.minecraft.advancements.triggers.Criterion;
@@ -63,15 +64,16 @@ public final class BuiltInConditions {
         }
     }
 
-    /// Counts loot-generation events containing a matching item, optionally restricted to a matching slain entity.
-    public record LootItem(ItemPredicate item, Optional<EntityPredicate> entity, int count, Optional<String> displayName) implements ConditionApi.Definition {
+    /// Counts loot-generation events containing a matching item, optionally restricted to a slain entity or broken block.
+    public record LootItem(ItemPredicate item, Optional<EntityPredicate> entity, Optional<BlockPredicate> block, int count, Optional<String> displayName) implements ConditionApi.Definition {
         public LootItem(ItemPredicate item, Optional<EntityPredicate> entity, int count) {
-            this(item, entity, count, Optional.empty());
+            this(item, entity, Optional.empty(), count, Optional.empty());
         }
 
         public static final MapCodec<LootItem> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
                 ItemPredicate.CODEC.fieldOf("item").forGetter(LootItem::item),
                 EntityPredicate.CODEC.optionalFieldOf("entity").forGetter(LootItem::entity),
+                BlockPredicate.CODEC.optionalFieldOf("block").forGetter(LootItem::block),
                 Codec.INT.optionalFieldOf("count", 1).forGetter(LootItem::count),
                 DISPLAY_NAME_CODEC.optionalFieldOf("display_name").forGetter(LootItem::displayName)
         ).apply(instance, LootItem::new));

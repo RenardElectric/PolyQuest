@@ -1,6 +1,7 @@
 package polycube.polyquest.resource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -14,10 +15,13 @@ import java.util.Map;
 import java.util.Objects;
 import net.minecraft.SharedConstants;
 import net.minecraft.advancements.triggers.CriteriaTriggers;
+import net.minecraft.core.Direction;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import polycube.polyquest.condition.BuiltInConditions;
@@ -243,6 +247,70 @@ final class QuestResourceCompilerTest {
         assertTrue(condition.entity().isPresent());
         assertEquals(1, condition.count());
         assertEquals("Find an iron ingot on a zombie", condition.displayName().orElseThrow());
+    }
+
+    @Test
+    void compilesLootItemWithABlockPredicate() {
+        Identifier questId = Identifier.fromNamespaceAndPath("test", "block_loot");
+        QuestResourceCompiler.ResourceSet resources = new QuestResourceCompiler.ResourceSet(
+                Map.of(questId, JsonParser.parseString("""
+                        {
+                          "availability": "unique",
+                          "title": "Block loot test",
+                          "icon": "minecraft:oak_log",
+                          "condition": {
+                            "type": "polyquest:loot_item",
+                            "item": { "items": "minecraft:oak_log" },
+                            "block": {
+                              "blocks": "minecraft:oak_log",
+                              "state": { "axis": "x" }
+                            }
+                          },
+                          "rewards": { "rewards": [{ "type": "polyquest:experience", "points": 1 }] }
+                        }
+                        """)),
+                Map.of(), Map.of());
+
+        var ops = RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY)
+                .createSerializationContext(JsonOps.INSTANCE);
+        QuestModel.Catalog catalog = new QuestResourceCompiler().compile(resources, ops).getOrThrow();
+        BuiltInConditions.LootItem condition = assertInstanceOf(BuiltInConditions.LootItem.class,
+                Objects.requireNonNull(catalog.quests().get(questId)).condition());
+
+        assertTrue(condition.entity().isEmpty());
+        assertTrue(condition.block().orElseThrow().matchesState(
+                Blocks.OAK_LOG.defaultBlockState().setValue(BlockStateProperties.AXIS, Direction.Axis.X)));
+        assertFalse(condition.block().orElseThrow().matchesState(Blocks.OAK_LOG.defaultBlockState()));
+        assertFalse(condition.block().orElseThrow().matchesState(Blocks.STONE.defaultBlockState()));
+        assertEquals(1, condition.count());
+    }
+
+    @Test
+    void rejectsLootItemWithBothEntityAndBlockSources() {
+        Identifier questId = Identifier.fromNamespaceAndPath("test", "ambiguous_loot");
+        QuestResourceCompiler.ResourceSet resources = new QuestResourceCompiler.ResourceSet(
+                Map.of(questId, JsonParser.parseString("""
+                        {
+                          "availability": "unique",
+                          "title": "Ambiguous loot",
+                          "icon": "minecraft:flint",
+                          "condition": {
+                            "type": "polyquest:loot_item",
+                            "item": { "items": "minecraft:flint" },
+                            "entity": { "minecraft:entity_type": "minecraft:zombie" },
+                            "block": { "blocks": "minecraft:gravel" }
+                          },
+                          "rewards": { "rewards": [{ "type": "polyquest:experience", "points": 1 }] }
+                        }
+                        """)),
+                Map.of(), Map.of());
+
+        var ops = RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY)
+                .createSerializationContext(JsonOps.INSTANCE);
+        var result = new QuestResourceCompiler().compile(resources, ops);
+
+        assertTrue(result.error().isPresent());
+        assertTrue(result.error().orElseThrow().message().contains("mutually exclusive"));
     }
 
     @Test

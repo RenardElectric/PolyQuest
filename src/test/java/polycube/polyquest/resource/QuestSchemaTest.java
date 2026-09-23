@@ -142,7 +142,7 @@ final class QuestSchemaTest {
         JsonObject advancementCriterion = definitions.getAsJsonObject("advancementCriterionCondition");
         assertObjectFields(
                 advancementCriterion,
-                Set.of("type", "trigger", "conditions"),
+                Set.of("type", "trigger", "conditions", "display_name"),
                 Set.of("type", "trigger")
         );
         JsonObject criterionProperties = advancementCriterion.getAsJsonObject("properties");
@@ -151,10 +151,16 @@ final class QuestSchemaTest {
         assertTrue(criterionProperties.getAsJsonObject("conditions")
                 .get("additionalProperties").getAsBoolean());
 
+        assertObjectFields(
+                definitions.getAsJsonObject("consumeItemsCondition"),
+                Set.of("type", "item", "count", "display_name"),
+                Set.of("type", "item", "count")
+        );
+
         JsonObject lootItem = definitions.getAsJsonObject("lootItemCondition");
         assertObjectFields(
                 lootItem,
-                Set.of("type", "item", "entity", "count"),
+                Set.of("type", "item", "entity", "count", "display_name"),
                 Set.of("type", "item")
         );
         JsonObject lootProperties = lootItem.getAsJsonObject("properties");

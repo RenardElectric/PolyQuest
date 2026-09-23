@@ -95,6 +95,7 @@
         },
         "trigger": { "description": "Minecraft advancement trigger identifier.", "examples": ["minecraft:player_killed_entity"] },
         "conditions": { "description": "Trigger-specific Minecraft predicate object; deliberately unrestricted.", "additionalProperties": true },
+        "display_name": { "description": "Optional player-facing objective label for advancement_criterion, consume_items or loot_item; supports template interpolation.", "examples": ["Kill a zombie while holding a sword", "${objective_name}"] },
         "item": { "description": "Minecraft item predicate, or ${item} for a whole-value substitution.", "properties": { "items": {}, "count": {}, "components": {}, "predicates": {} }, "additionalProperties": true },
         "entity": { "description": "Minecraft entity predicate or a whole-value parameter marker.", "additionalProperties": true },
         "count": { "description": "Required number of matching events or items.", "examples": [1, "${count}"] },

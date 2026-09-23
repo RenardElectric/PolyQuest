@@ -21,6 +21,7 @@ import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import polycube.polyquest.condition.BuiltInConditions;
+import polycube.polyquest.condition.CompositeConditions;
 import polycube.polyquest.condition.ConditionApi;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.reward.BuiltInRewards;
@@ -32,8 +33,10 @@ final class QuestResourceCompilerTest {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
         ConditionApi.register(BuiltInConditions.AdvancementCriterion.TYPE);
+        ConditionApi.register(BuiltInConditions.ConsumeItems.TYPE);
         ConditionApi.register(BuiltInConditions.ExplicitSignal.TYPE);
         ConditionApi.register(BuiltInConditions.LootItem.TYPE);
+        ConditionApi.register(CompositeConditions.AllOf.TYPE);
         RewardApi.register(BuiltInRewards.Experience.TYPE);
         RewardApi.register(BuiltInRewards.Money.TYPE);
         RewardApi.register(BuiltInRewards.ServerCommands.TYPE);
@@ -174,6 +177,7 @@ final class QuestResourceCompilerTest {
                           "condition": {
                             "type": "polyquest:advancement_criterion",
                             "trigger": "minecraft:tick",
+                            "display_name": "Stay in the world for a moment",
                             "conditions": {}
                           },
                           "rewards": {
@@ -194,6 +198,7 @@ final class QuestResourceCompilerTest {
                 BuiltInConditions.AdvancementCriterion.class,
                 Objects.requireNonNull(catalog.quests().get(questId)).condition());
         assertSame(CriteriaTriggers.TICK, condition.criterion().trigger());
+        assertEquals("Stay in the world for a moment", condition.displayName().orElseThrow());
     }
 
     @Test
@@ -207,6 +212,7 @@ final class QuestResourceCompilerTest {
                           "icon": "minecraft:iron_ingot",
                           "condition": {
                             "type": "polyquest:loot_item",
+                            "display_name": "Find an iron ingot on a zombie",
                             "item": {
                               "items": "minecraft:iron_ingot"
                             },
@@ -236,6 +242,58 @@ final class QuestResourceCompilerTest {
                 Objects.requireNonNull(catalog.quests().get(questId)).condition());
         assertTrue(condition.entity().isPresent());
         assertEquals(1, condition.count());
+        assertEquals("Find an iron ingot on a zombie", condition.displayName().orElseThrow());
+    }
+
+    @Test
+    void nestedObjectiveLabelsDoNotChangeFunctionalFingerprint() {
+        String original = """
+                {
+                  "availability": "unique",
+                  "title": "Objective labels",
+                  "icon": "minecraft:beacon",
+                  "condition": { "type": "polyquest:all_of", "children": [
+                    { "type": "polyquest:advancement_criterion", "trigger": "minecraft:tick", "display_name": "Wait a moment" },
+                    { "type": "polyquest:consume_items", "item": { "items": "minecraft:stone" }, "count": 2,
+                      "display_name": "Deliver two stones" },
+                    { "type": "polyquest:loot_item", "item": { "items": "minecraft:iron_ingot" },
+                      "display_name": "Find an iron ingot" }
+                  ] },
+                  "rewards": { "rewards": [ { "type": "polyquest:experience", "points": 1 } ] }
+                }
+                """;
+        String cosmetic = original.replace("Wait a moment", "Remain in the world")
+                .replace("Deliver two stones", "Turn in stone")
+                .replace("Find an iron ingot", "Loot iron");
+        String functional = original.replace("\"count\": 2", "\"count\": 3");
+        var ops = RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY)
+                .createSerializationContext(JsonOps.INSTANCE);
+
+        assertEquals(behaviorHash(original, Map.of(), ops), behaviorHash(cosmetic, Map.of(), ops));
+        assertNotEquals(behaviorHash(original, Map.of(), ops), behaviorHash(functional, Map.of(), ops));
+    }
+
+    @Test
+    void blankObjectiveLabelRejectsCatalog() {
+        Identifier questId = Identifier.fromNamespaceAndPath("test", "blank_objective_label");
+        QuestResourceCompiler.ResourceSet resources = new QuestResourceCompiler.ResourceSet(
+                Map.of(questId, JsonParser.parseString("""
+                        {
+                          "availability": "unique",
+                          "title": "Blank objective label",
+                          "icon": "minecraft:beacon",
+                          "condition": {
+                            "type": "polyquest:advancement_criterion",
+                            "trigger": "minecraft:tick",
+                            "display_name": "   "
+                          },
+                          "rewards": { "rewards": [ { "type": "polyquest:experience", "points": 1 } ] }
+                        }
+                        """)),
+                Map.of(), Map.of());
+
+        assertTrue(new QuestResourceCompiler().compile(resources, JsonOps.INSTANCE)
+                .error().orElseThrow().message().contains("display_name"));
     }
 
     @Test
@@ -288,11 +346,18 @@ final class QuestResourceCompilerTest {
     }
 
     private static String behaviorHash(String quest, Map<Identifier, JsonElement> profiles) {
+        return behaviorHash(quest, profiles, JsonOps.INSTANCE);
+    }
+
+    private static String behaviorHash(
+            String quest, Map<Identifier, JsonElement> profiles,
+            com.mojang.serialization.DynamicOps<JsonElement> ops
+    ) {
         Identifier questId = Identifier.fromNamespaceAndPath("test", "behavior_hash");
         QuestResourceCompiler.ResourceSet resources = new QuestResourceCompiler.ResourceSet(
                 Map.of(questId, JsonParser.parseString(quest)), Map.of(), profiles);
         return Objects.requireNonNull(new QuestResourceCompiler()
-                .compile(resources, JsonOps.INSTANCE)
+                .compile(resources, ops)
                 .getOrThrow()
                 .quests().get(questId)).behaviorHash();
     }

@@ -35,9 +35,9 @@ public final class ConditionText {
             case CompositeConditions.NOfM value -> Component.literal("Complete " + value.required() + " of " + value.children().size() + " objectives");
             case CompositeConditions.OptionalChild value -> Component.literal("Optional: ").append(summary(server, value.child()));
             case CompositeConditions.Choice value -> Component.literal("Choose one of " + value.branches().size() + " paths");
-            case BuiltInConditions.AdvancementCriterion value -> criterion(server, value.criterion());
-            case BuiltInConditions.ConsumeItems value -> Component.literal("Turn in " + value.count() + "× " + itemTarget(value.item()));
-            case BuiltInConditions.LootItem value -> Component.literal(lootItem(value));
+            case BuiltInConditions.AdvancementCriterion value -> value.displayName().<Component>map(Component::literal).orElseGet(() -> criterion(server, value.criterion()));
+            case BuiltInConditions.ConsumeItems value -> value.displayName().map(Component::literal).orElseGet(() -> Component.literal("Turn in " + value.count() + "× " + itemTarget(value.item())));
+            case BuiltInConditions.LootItem value -> value.displayName().map(Component::literal).orElseGet(() -> Component.literal(lootItem(value)));
             case BuiltInConditions.ObtainAdvancement value -> advancement(server, value.advancement());
             case BuiltInConditions.ExplicitSignal value when value.count() > 1 -> Component.literal("Trigger " + humanize(value.signal()) + " " + value.count() + " times");
             case BuiltInConditions.ExplicitSignal value -> Component.literal("Trigger " + humanize(value.signal()));

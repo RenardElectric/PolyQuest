@@ -189,6 +189,7 @@
       "properties": {
         "type": { "const": "polyquest:advancement_criterion" },
         "trigger": { "$ref": "#/$defs/identifier" },
+        "display_name": { "type": "string", "pattern": "\\S", "description": "Optional objective label shown instead of the generated criterion summary." },
         "conditions": {
           "type": "object",
           "additionalProperties": true
@@ -203,7 +204,8 @@
       "properties": {
         "type": { "const": "polyquest:consume_items" },
         "item": { "$ref": "#/$defs/itemPredicate" },
-        "count": { "type": "integer", "minimum": 1 }
+        "count": { "type": "integer", "minimum": 1 },
+        "display_name": { "type": "string", "pattern": "\\S", "description": "Optional objective label shown instead of the generated item summary." }
       },
       "additionalProperties": false
     },
@@ -216,7 +218,8 @@
         "type": { "const": "polyquest:loot_item" },
         "item": { "$ref": "#/$defs/itemPredicate" },
         "entity": { "$ref": "#/$defs/entityPredicate" },
-        "count": { "type": "integer", "minimum": 1, "default": 1 }
+        "count": { "type": "integer", "minimum": 1, "default": 1 },
+        "display_name": { "type": "string", "pattern": "\\S", "description": "Optional objective label shown instead of the generated loot summary." }
       },
       "additionalProperties": false
     },

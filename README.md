@@ -102,6 +102,7 @@ For example, this condition completes when the player kills a zombie:
 {
   "type": "polyquest:advancement_criterion",
   "trigger": "minecraft:player_killed_entity",
+  "display_name": "Defeat a zombie",
   "conditions": {
     "entity": {
       "type": "minecraft:entity_properties",
@@ -115,6 +116,11 @@ For example, this condition completes when the player kills a zombie:
 ```
 
 The `conditions` object depends on the selected trigger and follows Minecraft's advancement format.
+For `advancement_criterion`, `consume_items`, and `loot_item`, you can optionally set
+`display_name` to a short, precise objective sentence. It replaces PolyQuest's generated objective
+label in the quest GUI and command details while preserving the normal progress and completion
+indicators. If omitted, PolyQuest generates a label from the condition. Changing only this label
+on reload does not reset an active quest.
 Older `fish_item`, `kill_entity`, `break_block`, `visit_location`, `player_death` and
 `uninterrupted_fall` condition types are no longer registered.
 

@@ -107,6 +107,7 @@ final class QuestResourceCompiler {
             behavior.remove("title");
             behavior.remove("description");
             behavior.remove("icon");
+            stripConditionPresentation(behavior.get("condition"));
             stripRewardPresentation(behavior.get("rewards"));
             body.rewards().profile().ifPresent(profileId -> {
                 JsonElement profileJson = resources.rewardProfiles().get(profileId);
@@ -293,6 +294,42 @@ final class QuestResourceCompiler {
 
     private static String hash(JsonElement element) {
         return Hashing.sha256().hashString(GsonHelper.toStableString(element), StandardCharsets.UTF_8).toString();
+    }
+
+    /// Removes only built-in objective labels, leaving nested Minecraft predicates in the functional hash.
+    private static void stripConditionPresentation(@Nullable JsonElement condition) {
+        if (condition == null || !condition.isJsonObject()) return;
+        JsonObject object = condition.getAsJsonObject();
+        JsonElement type = object.get("type");
+        if (type == null || !type.isJsonPrimitive()) return;
+
+        switch (type.getAsString()) {
+            case "polyquest:advancement_criterion", "polyquest:consume_items", "polyquest:loot_item" -> object.remove("display_name");
+            case "polyquest:all_of", "polyquest:any_of", "polyquest:sequence", "polyquest:n_of_m" -> {
+                JsonElement children = object.get("children");
+                if (children != null && children.isJsonArray()) {
+                    children.getAsJsonArray().forEach(QuestResourceCompiler::stripConditionPresentation);
+                }
+            }
+            case "polyquest:repeat", "polyquest:optional", "polyquest:time_window" -> {
+                stripConditionPresentation(object.get("child"));
+                if (type.getAsString().equals("polyquest:time_window")) {
+                    stripConditionPresentation(object.get("start_condition"));
+                }
+            }
+            case "polyquest:choice" -> {
+                JsonElement branches = object.get("branches");
+                if (branches != null && branches.isJsonArray()) {
+                    for (JsonElement branch : branches.getAsJsonArray()) {
+                        if (branch.isJsonObject()) {
+                            stripConditionPresentation(branch.getAsJsonObject().get("condition"));
+                        }
+                    }
+                }
+            }
+            default -> {
+            }
+        }
     }
 
     /// Excludes built-in reward labels that affect only presentation, not delivery.

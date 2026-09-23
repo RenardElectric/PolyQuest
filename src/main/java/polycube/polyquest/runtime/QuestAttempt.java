@@ -1,5 +1,7 @@
 package polycube.polyquest.runtime;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.server.MinecraftServer;
 import polycube.polyquest.model.QuestModel;
@@ -15,16 +17,23 @@ public final class QuestAttempt {
     private final long createdAtTick;
     private long lastUpdatedTick;
     private boolean progressed;
+    private boolean restoredReady;
 
     public QuestAttempt(
             UUID playerId, QuestModel.Occurrence occurrence,
             MinecraftServer server, ConditionRuntime.CriterionRegistrar criteria
     ) {
-        this.occurrence = occurrence;
-        this.root = ConditionRuntime.create(
+        this(occurrence, ConditionRuntime.create(
                 occurrence.definition().condition(),
-                new ConditionRuntime.CreationContext(server::getTickCount, playerId, criteria));
-        this.createdAtTick = server.getTickCount();
+                new ConditionRuntime.CreationContext(server::getTickCount, playerId, criteria)),
+                server.getTickCount());
+    }
+
+    /// Narrow construction seam for testing a saved completion without a running Minecraft server.
+    QuestAttempt(QuestModel.Occurrence occurrence, ConditionRuntime.Instance root, long createdAtTick) {
+        this.occurrence = occurrence;
+        this.root = root;
+        this.createdAtTick = createdAtTick;
         this.lastUpdatedTick = createdAtTick;
         refreshStatus();
     }
@@ -81,7 +90,12 @@ public final class QuestAttempt {
         if (status == QuestModel.AttemptStatus.EXHAUSTED) {
             return ConditionRuntime.ClaimPreparation.blocked("Quest has no attempts remaining");
         }
-        ConditionRuntime.ClaimPreparation preparation = root.prepareClaim(new ConditionRuntime.ClaimContext(context.server(), context.player(), context.serverTick()));
+        if (restoredReady) {
+            // A completed condition has already passed its event-driven requirements. Claim-time
+            // item costs cannot be mandatory in a condition that reached READY_TO_CLAIM.
+            return ConditionRuntime.ClaimPreparation.readyPrep();
+        }
+        var preparation = root.prepareClaim(new ConditionRuntime.ClaimContext(context.server(), context.player(), context.serverTick()));
         refreshStatus();
         return preparation;
     }
@@ -103,6 +117,14 @@ public final class QuestAttempt {
         refreshStatus();
     }
 
+    /// Reprojects a saved completion without attempting to replay a one-shot game event.
+    void restoreReady() {
+        if (status != QuestModel.AttemptStatus.ACTIVE && status != QuestModel.AttemptStatus.READY_TO_CLAIM) return;
+        restoredReady = true;
+        status = QuestModel.AttemptStatus.READY_TO_CLAIM;
+        root.close();
+    }
+
     public JsonObject diagnostic() {
         JsonObject result = new JsonObject();
         result.addProperty("quest", occurrence.definition().id().toString());
@@ -110,8 +132,29 @@ public final class QuestAttempt {
         result.addProperty("status", status.name());
         result.addProperty("created_at_tick", createdAtTick);
         result.addProperty("last_updated_tick", lastUpdatedTick);
-        result.add("condition", root.diagnostic());
+        JsonObject condition = root.diagnostic();
+        if (restoredReady) markCompleted(condition);
+        result.add("condition", condition);
         return result;
+    }
+
+    /// Projects an unclaimed saved completion onto a fresh tree for inspection and display.
+    private static void markCompleted(JsonElement diagnostic) {
+        if (diagnostic instanceof JsonArray array) {
+            array.forEach(QuestAttempt::markCompleted);
+        } else if (diagnostic instanceof JsonObject object) {
+            if (object.has("completed")) object.addProperty("completed", true);
+            if (object.has("exhausted")) object.addProperty("exhausted", false);
+            if (object.has("optional_child_completed")) object.addProperty("optional_child_completed", true);
+            if (object.has("target")) {
+                if (object.has("current")) object.add("current", object.get("target").deepCopy());
+                if (object.has("iterations")) object.add("iterations", object.get("target").deepCopy());
+            }
+            if (object.has("current_index") && object.has("children")) {
+                object.addProperty("current_index", object.getAsJsonArray("children").size());
+            }
+            object.entrySet().forEach(entry -> markCompleted(entry.getValue()));
+        }
     }
 
     /// Distinguishes real progress from attempts created only to render quest state.
@@ -133,6 +176,10 @@ public final class QuestAttempt {
     /// Derives non-durable status from the root while preserving durable terminal states.
     private void refreshStatus() {
         if (status == QuestModel.AttemptStatus.CLAIMED || status == QuestModel.AttemptStatus.CLAIM_PENDING) {
+            return;
+        }
+        if (restoredReady) {
+            status = QuestModel.AttemptStatus.READY_TO_CLAIM;
             return;
         }
         if (root.exhausted()) {

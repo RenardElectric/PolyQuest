@@ -56,6 +56,76 @@ final class QuestLedgerTest {
     }
 
     @Test
+    void unclaimedCompletionsSurviveWorldSaveAndReload() {
+        UUID playerId = UUID.randomUUID();
+        var saved = JsonParser.parseString("""
+                { "ready": [
+                  { "player": "%s", "occurrence": "polyquest_test:unique|unique", "behavior_hash": "v1",
+                    "diagnostic": "{\\\"type\\\":\\\"polyquest:advancement_criterion\\\",\\\"completed\\\":true}" },
+                  { "player": "%s", "occurrence": "polyquest_test:daily|daily:2026-09-19:easy:0", "behavior_hash": "v1" }
+                ] }
+                """.formatted(playerId, playerId));
+
+        QuestLedger loaded = QuestLedger.CODEC.parse(JsonOps.INSTANCE, saved).getOrThrow();
+        var reloaded = QuestLedger.CODEC.encodeStart(JsonOps.INSTANCE, loaded).getOrThrow().getAsJsonObject();
+
+        assertTrue(reloaded.has("ready"), "An unclaimed completion must remain durable across a restart");
+        assertEquals(2, reloaded.getAsJsonArray("ready").size());
+        reloaded.getAsJsonArray("ready").forEach(entry ->
+                assertFalse(entry.getAsJsonObject().has("diagnostic"), "Legacy diagnostics should not be saved again"));
+    }
+
+    @Test
+    void readyCompletionCanBeRestoredAndClaimedAfterNbtRoundTrip() {
+        UUID playerId = UUID.randomUUID();
+        QuestModel.Occurrence occurrence = occurrence("ready_to_claim");
+        QuestLedger ledger = new QuestLedger();
+        ledger.markReady(playerId, occurrence);
+
+        var nbt = QuestLedger.CODEC.encodeStart(NbtOps.INSTANCE, ledger).getOrThrow();
+        QuestLedger restored = QuestLedger.CODEC.parse(NbtOps.INSTANCE, nbt).getOrThrow();
+
+        assertTrue(restored.isReady(playerId, occurrence));
+        assertFalse(restored.isClaimed(playerId, occurrence.key()));
+
+        QuestLedger.PendingTransaction pending = restored.beginClaim(playerId, occurrence, List.of());
+        restored.complete(pending);
+        assertTrue(restored.isClaimed(playerId, occurrence.key()));
+        assertFalse(restored.isReady(playerId, occurrence));
+    }
+
+    @Test
+    void readyCompletionIsInvalidatedByBehaviorChangeOrReset() {
+        UUID playerId = UUID.randomUUID();
+        QuestModel.Occurrence before = occurrence("ready_behavior", "before");
+        QuestModel.Occurrence after = occurrence("ready_behavior", "after");
+        QuestLedger ledger = new QuestLedger();
+        ledger.markReady(playerId, before);
+
+        assertTrue(ledger.retainReadyCompletions(Map.of(before.key().persistentKey(), before.definition().behaviorHash())).isEmpty());
+        assertTrue(ledger.isReady(playerId, before));
+        assertFalse(ledger.isReady(playerId, after));
+        assertEquals(1, ledger.retainReadyCompletions(Map.of(after.key().persistentKey(), after.definition().behaviorHash())).size());
+        assertFalse(ledger.isReady(playerId, before));
+
+        ledger.markReady(playerId, after);
+        assertTrue(ledger.resetClaim(playerId, after.key()));
+        assertFalse(ledger.isReady(playerId, after));
+    }
+
+    @Test
+    void pendingRewardIsNotReportedAsLostReadyProgress() {
+        UUID playerId = UUID.randomUUID();
+        QuestModel.Occurrence occurrence = occurrence("ready_with_pending_reward");
+        QuestLedger ledger = new QuestLedger();
+        ledger.markReady(playerId, occurrence);
+        ledger.beginClaim(playerId, occurrence, List.of());
+
+        assertTrue(ledger.retainReadyCompletions(Map.of()).isEmpty());
+        assertTrue(ledger.hasPending(playerId, occurrence.key()));
+    }
+
+    @Test
     void behaviorChangesPreservePendingAndCompletedState() {
         QuestLedger ledger = new QuestLedger();
         UUID playerId = UUID.randomUUID();

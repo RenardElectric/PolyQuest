@@ -51,6 +51,7 @@ public final class QuestEngine implements AutoCloseable {
             QuestModel.AttemptStatus before = attempt.status();
             changed |= attempt.onSignal(signal, server).changed();
             if (becameReady(before, attempt)) {
+                ledger.markReady(playerId, attempt.occurrence());
                 completed.add(new CompletedQuest(playerId, attempt.occurrence()));
                 changed = true;
             }
@@ -67,6 +68,7 @@ public final class QuestEngine implements AutoCloseable {
                 QuestModel.AttemptStatus before = attempt.status();
                 changed |= attempt.tick(server, serverTick).changed();
                 if (becameReady(before, attempt)) {
+                    ledger.markReady(entry.getKey(), attempt.occurrence());
                     completed.add(new CompletedQuest(entry.getKey(), attempt.occurrence()));
                     changed = true;
                 }
@@ -100,25 +102,28 @@ public final class QuestEngine implements AutoCloseable {
 
     /// Gets the mutable attempt and projects any durable claimed or pending state onto it.
     public QuestAttempt attempt(UUID playerId, QuestModel.Occurrence occurrence) {
-        QuestAttempt attempt = sessions
+        var attempt = sessions
                 .computeIfAbsent(playerId, id -> new PlayerQuestSession(id, criteria))
                 .getOrCreate(occurrence, server);
         if (ledger.isClaimed(playerId, occurrence.key())) {
             attempt.markClaimed();
         } else if (ledger.hasPending(playerId, occurrence.key())) {
             attempt.markPending();
+        } else if (ledger.isReady(playerId, occurrence)) {
+            attempt.restoreReady();
         }
         return attempt;
     }
 
     public Optional<QuestAttempt> existingAttempt(UUID playerId, QuestModel.Key key) {
-        PlayerQuestSession session = sessions.get(playerId);
+        var session = sessions.get(playerId);
         return session == null ? Optional.empty() : session.get(key);
     }
 
     /// Rebuilds availability and discards daily attempts whose occurrence is no longer active.
     void rotationChanged() {
         rebuildAvailableOccurrences();
+        ledger.retainReadyCompletions(activeBehaviorHashes());
         Set<QuestModel.Key> activeKeys = rotation.current().slots().values().stream()
                 .map(QuestModel.Occurrence::key)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -146,10 +151,9 @@ public final class QuestEngine implements AutoCloseable {
     /// Materializes current attempts so vanilla triggers are listening before gameplay events fire.
     void playerJoined(ServerPlayer player) {
         var playerId = player.getUUID();
-        var session = sessions.computeIfAbsent(playerId, id -> new PlayerQuestSession(id, criteria));
         for (var occurrence : available()) {
             if (!durablyCompleted(playerId, occurrence.key())) {
-                session.getOrCreate(occurrence, server);
+                attempt(playerId, occurrence);
             }
         }
     }
@@ -164,6 +168,12 @@ public final class QuestEngine implements AutoCloseable {
         var currentKeys = currentOccurrences.keySet();
         var behaviorChanged = update.diff().behaviorChanged();
         Set<UUID> resets = new LinkedHashSet<>();
+
+        for (QuestLedger.ReadyCompletion removed : ledger.retainReadyCompletions(activeBehaviorHashes())) {
+            if (behaviorChanged.stream().anyMatch(id -> removed.occurrenceKey().startsWith(id + "|"))) {
+                resets.add(removed.playerId());
+            }
+        }
 
         for (Map.Entry<UUID, PlayerQuestSession> entry : sessions.entrySet()) {
             UUID playerId = entry.getKey();
@@ -199,6 +209,14 @@ public final class QuestEngine implements AutoCloseable {
 
     private boolean durablyCompleted(UUID playerId, QuestModel.Key key) {
         return ledger.isClaimed(playerId, key) || ledger.hasPending(playerId, key);
+    }
+
+    private Map<String, String> activeBehaviorHashes() {
+        var active = new HashMap<String, String>();
+        for (var occurrence : availableOccurrences) {
+            active.put(occurrence.key().persistentKey(), occurrence.definition().behaviorHash());
+        }
+        return active;
     }
 
     private void activateOnlinePlayers() {

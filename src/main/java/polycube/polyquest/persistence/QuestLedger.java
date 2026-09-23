@@ -20,10 +20,8 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.function.Function;
 
-/// Durable world-owned claim and reward state stored through Minecraft's SavedData system.
-///
-/// Attempt progress is intentionally absent. Only successful occurrence claims,
-/// pending rewards, rotation metadata, and notification receipts survive a restart.
+/// Durable world-owned quest state stored through Minecraft's SavedData system.
+/// Partial attempt progress is intentionally absent; unclaimed completions are retained.
 public final class QuestLedger extends SavedData {
     private static final Codec<LocalDate> DATE_CODEC = Codec.STRING.comapFlatMap(
             value -> {
@@ -44,13 +42,13 @@ public final class QuestLedger extends SavedData {
     private static final Codec<Map<QuestModel.Difficulty, Integer>> ROTATION_GENERATIONS_CODEC = Codec.unboundedMap(QuestModel.Difficulty.CODEC, NON_NEGATIVE_INT);
     private static final Codec<Set<UUID>> UUID_SET_CODEC = UUIDUtil.STRING_CODEC.listOf().xmap(HashSet::new, values -> values.stream().sorted().toList());
     private static final Codec<List<RewardApi.Definition>> REWARDS_CODEC = RewardApi.codec().listOf();
-
     static final Codec<QuestLedger> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             DATE_CODEC.optionalFieldOf("rotation_date", LocalDate.MIN).forGetter(ledger -> ledger.rotationDate),
             ROTATION_GENERATIONS_CODEC.optionalFieldOf("rotation_generations", Map.of()).forGetter(ledger -> ledger.rotationGenerations),
             UUID_SET_CODEC.optionalFieldOf("rotation_notified_players", Set.of()).forGetter(ledger -> ledger.rotationNotifiedPlayers),
             CLAIMS_CODEC.optionalFieldOf("claims", Map.of()).forGetter(ledger -> ledger.claims),
-            PendingTransaction.CODEC.listOf().optionalFieldOf("pending", List.of()).forGetter(ledger -> List.copyOf(ledger.pending.values()))
+            PendingTransaction.CODEC.listOf().optionalFieldOf("pending", List.of()).forGetter(ledger -> List.copyOf(ledger.pending.values())),
+            ReadyCompletion.CODEC.listOf().optionalFieldOf("ready", List.of()).forGetter(QuestLedger::readyCompletions)
     ).apply(instance, QuestLedger::new));
 
     private static final SavedDataType<QuestLedger> TYPE = new SavedDataType<>(
@@ -62,6 +60,7 @@ public final class QuestLedger extends SavedData {
     private final Map<UUID, Set<String>> claims = new HashMap<>();
     private final Map<UUID, PendingTransaction> pending = new LinkedHashMap<>();
     private final Map<UUID, List<PendingTransaction>> pendingByPlayer = new HashMap<>();
+    private final Map<UUID, Map<String, ReadyCompletion>> ready = new HashMap<>();
     private final EnumMap<QuestModel.Difficulty, Integer> rotationGenerations = new EnumMap<>(QuestModel.Difficulty.class);
     private final Set<UUID> rotationNotifiedPlayers = new HashSet<>();
     private LocalDate rotationDate = LocalDate.MIN;
@@ -75,7 +74,7 @@ public final class QuestLedger extends SavedData {
     private QuestLedger(
             LocalDate rotationDate, Map<QuestModel.Difficulty, Integer> rotationGenerations,
             Set<UUID> rotationNotifiedPlayers, Map<UUID, Set<String>> claims,
-            List<PendingTransaction> pendingTransactions
+            List<PendingTransaction> pendingTransactions, List<ReadyCompletion> readyCompletions
     ) {
         this();
         this.rotationDate = rotationDate;
@@ -83,6 +82,7 @@ public final class QuestLedger extends SavedData {
         this.rotationNotifiedPlayers.addAll(rotationNotifiedPlayers);
         claims.forEach((playerId, values) -> this.claims.put(playerId, new HashSet<>(values)));
         pendingTransactions.forEach(this::putPending);
+        readyCompletions.forEach(this::putReady);
     }
 
     public static QuestLedger load(MinecraftServer server) {
@@ -92,6 +92,62 @@ public final class QuestLedger extends SavedData {
 
     public boolean isClaimed(UUID playerId, QuestModel.Key occurrence) {
         return claims.getOrDefault(playerId, Set.of()).contains(occurrence.persistentKey());
+    }
+
+    /// Records an unclaimed completion until the occurrence is claimed or reset.
+    public void markReady(UUID playerId, QuestModel.Occurrence occurrence) {
+        var completion = new ReadyCompletion(playerId, occurrence.key().persistentKey(), occurrence.definition().behaviorHash());
+        putReady(completion);
+        setDirty();
+    }
+
+    public boolean isReady(UUID playerId, QuestModel.Occurrence occurrence) {
+        var completion = ready.getOrDefault(playerId, Map.of()).get(occurrence.key().persistentKey());
+        return completion != null && completion.behaviorHash().equals(occurrence.definition().behaviorHash());
+    }
+
+    /// Invalidates stale completed attempts after a rotation or functional catalog change.
+    public List<ReadyCompletion> retainReadyCompletions(Map<String, String> activeBehaviorHashes) {
+        var removedCompletions = new ArrayList<ReadyCompletion>();
+        var removedAny = false;
+        for (var playerEntry : ready.entrySet()) {
+            removedAny |= playerEntry.getValue().values().removeIf(completion -> {
+                boolean stale = !completion.behaviorHash().equals(activeBehaviorHashes.get(completion.occurrenceKey()));
+                // A pending transaction already owns the outcome; do not report it as lost progress.
+                if (stale && !isClaimedOrPending(completion.playerId(), completion.occurrenceKey())) {
+                    removedCompletions.add(completion);
+                }
+                return stale;
+            });
+        }
+        ready.values().removeIf(Map::isEmpty);
+        if (removedAny) setDirty();
+        return List.copyOf(removedCompletions);
+    }
+
+    private List<ReadyCompletion> readyCompletions() {
+        return ready.values().stream()
+                .flatMap(playerReady -> playerReady.values().stream())
+                .sorted(Comparator.comparing(ReadyCompletion::playerId).thenComparing(ReadyCompletion::occurrenceKey))
+                .toList();
+    }
+
+    private void putReady(ReadyCompletion completion) {
+        ready.computeIfAbsent(completion.playerId(), ignored -> new HashMap<>())
+                .put(completion.occurrenceKey(), completion);
+    }
+
+    private boolean clearReady(UUID playerId, String occurrenceKey) {
+        var playerReady = ready.get(playerId);
+        if (playerReady == null || playerReady.remove(occurrenceKey) == null) return false;
+        if (playerReady.isEmpty()) ready.remove(playerId);
+        return true;
+    }
+
+    private boolean isClaimedOrPending(UUID playerId, String occurrenceKey) {
+        return claims.getOrDefault(playerId, Set.of()).contains(occurrenceKey)
+                || pendingByPlayer.getOrDefault(playerId, List.of()).stream()
+                .anyMatch(transaction -> transaction.occurrenceKey().equals(occurrenceKey));
     }
 
     public PendingTransaction beginClaim(UUID playerId, QuestModel.Occurrence occurrence, List<RewardApi.Definition> rewards) {
@@ -141,6 +197,7 @@ public final class QuestLedger extends SavedData {
         var removed = pending.remove(transaction.id());
         if (removed == null) return;
         claims.computeIfAbsent(removed.playerId(), ignored -> new HashSet<>()).add(removed.occurrenceKey());
+        clearReady(removed.playerId(), removed.occurrenceKey());
         unindexPending(removed);
         setDirty();
     }
@@ -182,15 +239,24 @@ public final class QuestLedger extends SavedData {
     }
 
     public boolean resetClaim(UUID playerId, QuestModel.Key occurrence) {
+        var changed = clearReady(playerId, occurrence.persistentKey());
         Set<String> playerClaims = claims.get(playerId);
         if (playerClaims != null && playerClaims.remove(occurrence.persistentKey())) {
             if (playerClaims.isEmpty()) {
                 claims.remove(playerId);
             }
-            setDirty();
-            return true;
+            changed = true;
         }
-        return false;
+        if (changed) setDirty();
+        return changed;
+    }
+
+    public record ReadyCompletion(UUID playerId, String occurrenceKey, String behaviorHash) {
+        private static final Codec<ReadyCompletion> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+                UUIDUtil.STRING_CODEC.fieldOf("player").forGetter(ReadyCompletion::playerId),
+                Codec.STRING.fieldOf("occurrence").forGetter(ReadyCompletion::occurrenceKey),
+                Codec.STRING.fieldOf("behavior_hash").forGetter(ReadyCompletion::behaviorHash)
+        ).apply(instance, ReadyCompletion::new));
     }
 
     public void beginRotation(LocalDate date) {

@@ -88,8 +88,9 @@ public final class QuestManager {
 
     public void onPlayerJoin(ServerPlayer player) {
         refreshRotationAndEngine();
-        advancementCriteria.rebind(player);
         engine.playerJoined(player);
+        // Fabric JOIN runs before PlayerList indexes the player, so bind newly created criteria directly.
+        advancementCriteria.rebind(player);
         claims.retryPending(player, false);
         notifyDailyRotation(player);
         if (pendingResetNotifications.remove(player.getUUID())) {
@@ -237,7 +238,7 @@ public final class QuestManager {
     }
 
     private void sendUnclaimedSummary(ServerPlayer player) {
-        List<QuestModel.Occurrence> ready = engine.available().stream()
+        var ready = engine.available().stream()
                 .filter(occurrence -> engine.existingAttempt(player.getUUID(), occurrence.key())
                         .map(attempt -> attempt.status() == QuestModel.AttemptStatus.READY_TO_CLAIM)
                         .orElse(false))

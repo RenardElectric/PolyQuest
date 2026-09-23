@@ -181,7 +181,7 @@ public final class QuestDisplay {
                 }
             }
             case CompositeConditions.TimeWindow value -> {
-                var attempts = attemptsRemaining(value, diagnostic);
+                var attempts = isActive ? attemptsRemaining(value, diagnostic) : "";
                 var timeRemaining = !isActive ? "" : " • " + timeRemaining(server, diagnostic);
                 lines.add(conditionRule(prefix, "Within " + duration(value.durationTicks()) + attempts + timeRemaining + ":", status, depth));
 

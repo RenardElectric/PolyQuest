@@ -3,10 +3,14 @@ package polycube.polyquest.runtime;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.signal.QuestSignal;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /// Mutable progress for one player and one quest occurrence.
@@ -18,6 +22,7 @@ public final class QuestAttempt {
     private long lastUpdatedTick;
     private boolean progressed;
     private boolean restoredReady;
+    private final Set<Identifier> observedAdvancements = new HashSet<>();
 
     public QuestAttempt(
             UUID playerId, QuestModel.Occurrence occurrence,
@@ -58,8 +63,11 @@ public final class QuestAttempt {
         if (terminal()) {
             return ConditionRuntime.Update.NONE;
         }
-        ConditionRuntime.Update update = root.onSignal(signal, new ConditionRuntime.EvaluationContext(server, signal.serverTick()));
+        var update = root.onSignal(signal, new ConditionRuntime.EvaluationContext(server, signal.serverTick()));
         if (update.changed()) {
+            if (signal instanceof QuestSignal.Advancement advancement) {
+                observedAdvancements.add(advancement.advancement().id());
+            }
             lastUpdatedTick = signal.serverTick();
             progressed = true;
         }
@@ -67,11 +75,33 @@ public final class QuestAttempt {
         return update;
     }
 
+    /// Reconciles saved vanilla progress once per advancement and attempt, avoiding repeat-count inflation on rejoin.
+    ConditionRuntime.Update reconcileAdvancement(QuestSignal.Advancement signal, MinecraftServer server) {
+        return observedAdvancements.contains(signal.advancement().id())
+                ? ConditionRuntime.Update.NONE
+                : onSignal(signal, server);
+    }
+
+    /// Rechecks unlocked advancements until ordered condition steps stop progressing.
+    ConditionRuntime.Update reconcileAdvancements(List<QuestSignal.Advancement> signals, MinecraftServer server) {
+        var result = ConditionRuntime.Update.NONE;
+        boolean progressed;
+        do {
+            progressed = false;
+            for (var signal : signals) {
+                var update = reconcileAdvancement(signal, server);
+                result = result.merge(update);
+                progressed |= update.changed();
+            }
+        } while (progressed);
+        return result;
+    }
+
     public ConditionRuntime.Update tick(MinecraftServer server, long serverTick) {
         if (terminal()) {
             return ConditionRuntime.Update.NONE;
         }
-        ConditionRuntime.Update update = root.tick(new ConditionRuntime.EvaluationContext(server, serverTick));
+        var update = root.tick(new ConditionRuntime.EvaluationContext(server, serverTick));
         if (update.changed()) {
             lastUpdatedTick = serverTick;
             progressed = true;

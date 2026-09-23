@@ -41,12 +41,14 @@ public final class QuestEngine implements AutoCloseable {
     ProgressResult onSignal(QuestSignal signal) {
         var playerId = signal.player().getUUID();
         var session = sessions.get(playerId);
+        var activation = new ProgressResult(false, List.of());
         if (session == null) {
-            playerJoined(signal.player());
+            activation = activatePlayer(signal.player());
             session = sessions.get(playerId);
         }
-        boolean changed = false;
-        List<CompletedQuest> completed = new ArrayList<>();
+        if (session == null) return activation;
+        var changed = activation.changed();
+        var completed = new ArrayList<>(activation.completed());
         for (QuestAttempt attempt : session.attempts()) {
             QuestModel.AttemptStatus before = attempt.status();
             changed |= attempt.onSignal(signal, server).changed();
@@ -61,8 +63,8 @@ public final class QuestEngine implements AutoCloseable {
 
     /// Advances deadline-only nodes for online and offline in-memory sessions.
     ProgressResult tick(long serverTick) {
-        boolean changed = false;
-        List<CompletedQuest> completed = new ArrayList<>();
+        var changed = false;
+        var completed = new ArrayList<CompletedQuest>();
         for (var entry : sessions.entrySet()) {
             for (QuestAttempt attempt : entry.getValue().attempts()) {
                 QuestModel.AttemptStatus before = attempt.status();
@@ -142,20 +144,44 @@ public final class QuestEngine implements AutoCloseable {
             ServerPlayer player = server.getPlayerList().getPlayer(playerId);
             if (player != null) {
                 // A reset quest needs its fake criteria listening before the next gameplay event.
-                playerJoined(player);
+                activatePlayer(player);
             }
         }
         return changed;
     }
 
-    /// Materializes current attempts so vanilla triggers are listening before gameplay events fire.
-    void playerJoined(ServerPlayer player) {
+    /// Materializes current attempts and applies achievements the player has already unlocked.
+    ProgressResult activatePlayer(ServerPlayer player) {
         var playerId = player.getUUID();
         for (var occurrence : available()) {
             if (!durablyCompleted(playerId, occurrence.key())) {
                 attempt(playerId, occurrence);
             }
         }
+        return reconcileCompletedAdvancements(player);
+    }
+
+    /// Replays already-unlocked vanilla advancements only into attempts that have not counted them.
+    private ProgressResult reconcileCompletedAdvancements(ServerPlayer player) {
+        var session = sessions.get(player.getUUID());
+        if (session == null) return new ProgressResult(false, List.of());
+
+        var tick = server.getTickCount();
+        var unlocked = server.getAdvancements().getAllAdvancements().stream()
+                .filter(holder -> player.getAdvancements().getOrStartProgress(holder).isDone())
+                .map(holder -> new QuestSignal.Advancement(player, tick, holder))
+                .toList();
+        var completed = new ArrayList<CompletedQuest>();
+        var changed = false;
+        for (var attempt : session.attempts()) {
+            var before = attempt.status();
+            changed |= attempt.reconcileAdvancements(unlocked, server).changed();
+            if (becameReady(before, attempt)) {
+                ledger.markReady(player.getUUID(), attempt.occurrence());
+                completed.add(new CompletedQuest(player.getUUID(), attempt.occurrence()));
+            }
+        }
+        return new ProgressResult(changed, completed);
     }
 
     /// Reconciles live attempts with a reloaded catalog and reports players whose progress was reset due to a behavior change.
@@ -220,7 +246,7 @@ public final class QuestEngine implements AutoCloseable {
     }
 
     private void activateOnlinePlayers() {
-        server.getPlayerList().getPlayers().forEach(this::playerJoined);
+        server.getPlayerList().getPlayers().forEach(this::activatePlayer);
     }
 
     @Override

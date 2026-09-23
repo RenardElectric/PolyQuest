@@ -96,9 +96,10 @@ public final class QuestManager {
 
     public void onPlayerJoin(ServerPlayer player) {
         refreshRotationAndEngine();
-        engine.playerJoined(player);
+        var activation = engine.activatePlayer(player);
         // Fabric JOIN runs before PlayerList indexes the player, so bind newly created criteria directly.
         advancementCriteria.rebind(player);
+        if (activation.changed()) questChanges.changed();
         claims.retryPending(player, false);
         notifyQuestChange(player);
         sendUnclaimedSummary(player);
@@ -110,7 +111,12 @@ public final class QuestManager {
 
     /// Reattaches fake criteria after Minecraft rebuilds every player's advancement state.
     public void onDataPackReload() {
-        server.getPlayerList().getPlayers().forEach(advancementCriteria::rebind);
+        var changed = false;
+        for (var player : server.getPlayerList().getPlayers()) {
+            advancementCriteria.rebind(player);
+            changed |= engine.activatePlayer(player).changed();
+        }
+        if (changed) questChanges.changed();
     }
 
     public void shutdown() {

@@ -1,6 +1,7 @@
 package polycube.polyquest.runtime;
 
 import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -10,6 +11,7 @@ import polycube.polyquest.commands.QuestCommandText;
 import polycube.polyquest.config.QuestConfig;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.persistence.QuestLedger;
+import polycube.polyquest.presentation.QuestDisplay;
 import polycube.polyquest.resource.QuestCatalogManager;
 import polycube.polyquest.reward.RewardApi;
 import polycube.polyquest.rotation.DailyRotationService;
@@ -228,7 +230,7 @@ public final class QuestManager {
         for (var completed : progress.completed()) {
             var player = server.getPlayerList().getPlayer(completed.playerId());
             if (player == null) continue;
-            player.sendSystemMessage(QuestCommandText.questCompleted(completed.occurrence()));
+            player.sendSystemMessage(QuestCommandText.questCompleted(completed.occurrence(), questHover(player, completed.occurrence())));
             notifiedPlayers.add(completed.playerId());
         }
         for (var playerId : notifiedPlayers) {
@@ -243,7 +245,11 @@ public final class QuestManager {
                         .map(attempt -> attempt.status() == QuestModel.AttemptStatus.READY_TO_CLAIM)
                         .orElse(false))
                 .toList();
-        QuestCommandText.unclaimedSummary(ready).ifPresent(player::sendSystemMessage);
+        QuestCommandText.unclaimedSummary(ready, occurrence -> questHover(player, occurrence)).ifPresent(player::sendSystemMessage);
+    }
+
+    private Component questHover(ServerPlayer player, QuestModel.Occurrence occurrence) {
+        return QuestDisplay.format(this, server, player.nameAndId(), occurrence).hoverText();
     }
 
     @FunctionalInterface

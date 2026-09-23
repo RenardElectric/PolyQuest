@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 import static polycube.polycore.text.TextComponents.*;
 import static polycube.polycore.text.TextCore.*;
@@ -23,6 +24,8 @@ import static polycube.polycore.text.TextUtil.descriptionLines;
 
 /// Shared, vanilla-client-compatible chat formatting. Never styles a caller's component in place.
 public final class QuestCommandText {
+    private static final int MAX_CLAIMABLE_NAMES = 4;
+
     private QuestCommandText() {}
 
     public static MutableComponent questDefinition(QuestModel.Definition quest) {
@@ -64,6 +67,20 @@ public final class QuestCommandText {
         return quest.difficulty()
                 .map(difficulty -> "Daily • " + titleCase(difficulty.getSerializedName()))
                 .orElse("Daily");
+    }
+
+    /// Matches the quest giver's daily-difficulty and unique-quest title colors.
+    public static ChatFormatting questColor(QuestModel.Definition quest) {
+        return quest.difficulty().map(difficulty -> switch (difficulty) {
+            case EASY -> ChatFormatting.GREEN;
+            case MEDIUM -> ChatFormatting.GOLD;
+            case HARD -> ChatFormatting.RED;
+        }).orElse(ChatFormatting.LIGHT_PURPLE);
+    }
+
+    public static MutableComponent questName(QuestModel.Occurrence occurrence, Component details) {
+        return hover(styled("[" + occurrence.definition().title() + "]",
+                questColor(occurrence.definition()), true), details);
     }
 
     public static String expiry(QuestModel.Occurrence occurrence) {
@@ -141,21 +158,35 @@ public final class QuestCommandText {
         return message().append(colored("Some quests were updated, so your progress was reset.", ChatFormatting.GRAY));
     }
 
-    public static MutableComponent questCompleted(QuestModel.Occurrence occurrence) {
+    public static MutableComponent questCompleted(QuestModel.Occurrence occurrence, Component details) {
         return message()
                 .append(colored("Quest completed: ", ChatFormatting.GREEN))
-                .append(styled(occurrence.definition().title(), ChatFormatting.AQUA, true))
+                .append(questName(occurrence, details))
                 .append(colored(". Visit the Quest Giver to claim your reward.", ChatFormatting.GRAY));
     }
 
-    /// Lists every currently claimable quest without persisting notification receipts.
-    public static Optional<MutableComponent> unclaimedSummary(List<QuestModel.Occurrence> ready) {
+    public static MutableComponent questClaimed(QuestModel.Occurrence occurrence, Component details) {
+        return message()
+                .append(colored("Successfully claimed quest: ", ChatFormatting.GREEN))
+                .append(questName(occurrence, details))
+                .append(colored(".", ChatFormatting.GRAY));
+    }
+
+    /// Keeps the chat summary short while retaining the total count and quest-giver hover details.
+    public static Optional<MutableComponent> unclaimedSummary(
+            List<QuestModel.Occurrence> ready, Function<QuestModel.Occurrence, Component> details
+    ) {
         if (ready.isEmpty()) return Optional.empty();
         var message = message();
         message.append(colored(count(ready.size(), "quest") + " ready to claim: ", ChatFormatting.GREEN));
-        for (int index = 0; index < ready.size(); index++) {
+        int visible = Math.min(ready.size(), MAX_CLAIMABLE_NAMES);
+        for (int index = 0; index < visible; index++) {
             if (index > 0) message.append(colored(", ", ChatFormatting.GRAY));
-            message.append(value(ready.get(index).definition().title()));
+            var occurrence = ready.get(index);
+            message.append(questName(occurrence, details.apply(occurrence)));
+        }
+        if (ready.size() > visible) {
+            message.append(colored(", ... and " + (ready.size() - visible) + " more", ChatFormatting.GRAY));
         }
         return Optional.of(message.append(colored(". Visit the Quest Giver.", ChatFormatting.GRAY)));
     }

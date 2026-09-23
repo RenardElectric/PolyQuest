@@ -62,7 +62,7 @@ public final class QuestDisplay {
 
         lines.add(Component.empty());
         lines.add(section("QUEST DETAILS"));
-        var nameColor = difficultyColor(definition.difficulty());
+        var nameColor = QuestCommandText.questColor(definition);
         lines.add(detail("Quest", QuestCommandText.availability(definition), nameColor));
         lines.add(detail("Expires", QuestCommandText.expiry(occurrence), ChatFormatting.WHITE));
 
@@ -424,14 +424,6 @@ public final class QuestDisplay {
         };
     }
 
-    private static ChatFormatting difficultyColor(Optional<QuestModel.Difficulty> difficulty) {
-        return difficulty.map(value -> switch (value) {
-            case EASY -> ChatFormatting.GREEN;
-            case MEDIUM -> ChatFormatting.GOLD;
-            case HARD -> ChatFormatting.RED;
-        }).orElse(ChatFormatting.LIGHT_PURPLE);
-    }
-
     private static ChatFormatting statusColor(QuestModel.AttemptStatus status) {
         return switch (status) {
             case ACTIVE -> ChatFormatting.AQUA;
@@ -461,6 +453,15 @@ public final class QuestDisplay {
     ) {
         public Presentation {
             lines = List.copyOf(lines);
+        }
+
+        /// Reuses the quest-giver details as a chat hover card.
+        public Component hoverText() {
+            var hover = Component.empty().append(title);
+            for (Component line : lines) {
+                hover.append("\n").append(line);
+            }
+            return hover.append("\n\n").append(actionHint);
         }
     }
 

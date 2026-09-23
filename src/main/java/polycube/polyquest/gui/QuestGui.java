@@ -13,6 +13,7 @@ import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Items;
 import org.jspecify.annotations.Nullable;
 import polycube.polycore.text.TextComponents;
+import polycube.polyquest.commands.QuestCommandText;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.condition.CompositeConditions;
 import polycube.polyquest.condition.ConditionApi;
@@ -133,7 +134,9 @@ public abstract class QuestGui extends SimpleGui {
                     var result = manager.claim(player, definition.id());
                     if (result.successful()) {
                         playSound(player, SoundEvents.VILLAGER_YES);
-                        player.sendSystemMessage(TextComponents.success("Successfully claimed quest: " + definition.title()));
+                        player.sendSystemMessage(QuestCommandText.questClaimed(
+                                quest, QuestDisplay.format(manager, manager.server(), player.nameAndId(), quest)
+                                        .hoverText()));
                     } else {
                         playSound(player, SoundEvents.VILLAGER_NO);
                         player.sendSystemMessage(TextComponents.error(result.message()));

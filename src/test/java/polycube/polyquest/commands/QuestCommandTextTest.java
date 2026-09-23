@@ -6,6 +6,7 @@ import net.minecraft.server.Bootstrap;
 import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import polycube.polycore.text.TextComponents;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.reward.RewardApi;
@@ -28,6 +29,7 @@ final class QuestCommandTextTest {
     void summaryNamesAllReadyQuestsAndUsesCorrectCount() {
         var first = occurrence("first", "Find the Relic");
         var second = occurrence("second", "Explore the Cave");
+        TextComponents.modName = "PolyQuest";
 
         assertTrue(QuestCommandText.unclaimedSummary(List.of()).isEmpty());
         assertEquals("[PolyQuest] 1 quest ready to claim: Find the Relic. Visit the Quest Giver.",

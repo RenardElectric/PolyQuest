@@ -7,6 +7,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.NameAndId;
+import org.jspecify.annotations.Nullable;
 import polycube.polyquest.commands.QuestCommandText;
 import polycube.polyquest.condition.BuiltInConditions;
 import polycube.polyquest.condition.CompositeConditions;
@@ -457,11 +458,18 @@ public final class QuestDisplay {
 
         /// Reuses the quest-giver details as a chat hover card.
         public Component hoverText() {
+            return hoverText(actionHint);
+        }
+
+        public Component hoverText(@Nullable Component actionHint) {
             var hover = Component.empty().append(title);
             for (Component line : lines) {
                 hover.append("\n").append(line);
             }
-            return hover.append("\n\n").append(actionHint);
+            if (actionHint != null) {
+                hover.append("\n\n").append(actionHint);
+            }
+            return hover;
         }
     }
 

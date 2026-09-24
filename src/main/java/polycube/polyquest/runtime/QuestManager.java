@@ -241,7 +241,7 @@ public final class QuestManager {
         for (var completed : progress.completed()) {
             var player = server.getPlayerList().getPlayer(completed.playerId());
             if (player == null) continue;
-            player.sendSystemMessage(QuestCommandText.questCompleted(completed.occurrence(), questHover(player, completed.occurrence())));
+            player.sendSystemMessage(QuestCommandText.questCompleted(this, player.nameAndId(), completed.occurrence()));
             notifiedPlayers.add(completed.playerId());
         }
         for (var playerId : notifiedPlayers) {
@@ -256,11 +256,7 @@ public final class QuestManager {
                         .map(attempt -> attempt.status() == QuestModel.AttemptStatus.READY_TO_CLAIM)
                         .orElse(false))
                 .toList();
-        QuestCommandText.unclaimedSummary(ready, occurrence -> questHover(player, occurrence)).ifPresent(player::sendSystemMessage);
-    }
-
-    private Component questHover(ServerPlayer player, QuestModel.Occurrence occurrence) {
-        return QuestDisplay.format(this, server, player.nameAndId(), occurrence).hoverText();
+        QuestCommandText.unclaimedSummary(this, player.nameAndId(), ready).ifPresent(player::sendSystemMessage);
     }
 
     @FunctionalInterface

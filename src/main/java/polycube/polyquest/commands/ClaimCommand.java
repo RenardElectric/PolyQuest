@@ -58,10 +58,7 @@ public final class ClaimCommand extends PolyCommand {
         var manager = CommandResult.require(PolyQuestApi.manager());
         var result = CommandResult.require(PolyQuestApi.claim(player, id));
         var occurrence = manager.findOccurrence(id);
-        var quest = occurrence.map(value -> {
-            var status = manager.attempt(player.nameAndId(), value).status();
-            return QuestCommandText.quest(source.getServer(), value, status, player.nameAndId());
-        }).orElseGet(() -> TextComponents.copy(id.toString(), id.toString()));
+        var quest = occurrence.map(value -> QuestCommandText.quest(manager, player.nameAndId(), value)).orElseGet(() -> TextComponents.copy(id.toString(), id.toString()));
 
         if (result.successful()) {
             var message = TextComponents.success("Claimed ").append(quest);

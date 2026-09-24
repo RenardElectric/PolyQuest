@@ -61,8 +61,7 @@ public final class RerollCommand extends PolyCommand {
                                 })
                                 .executes(context -> {
                                     var difficulty = difficulty(context.getSource(), StringArgumentType.getString(context, "difficulty"));
-                                    return difficulty == null ? 0 : rerollSelected(context.getSource(), difficulty,
-                                            IdentifierArgument.getId(context, "quest_id"));
+                                    return difficulty == null ? 0 : rerollSelected(context.getSource(), difficulty, IdentifierArgument.getId(context, "quest_id"));
                                 })));
     }
 
@@ -83,15 +82,15 @@ public final class RerollCommand extends PolyCommand {
             return 0;
         }
 
+        var player = source.getPlayerOrException().nameAndId();
         var message = TextComponents.success("Rerolled daily slots: " + difficultyNames(changed));
         for (var difficulty : QuestModel.Difficulty.values()) {
             if (!changed.contains(difficulty)) continue;
             var selected = manager.dailyAssignment().slots().get(difficulty);
             if (selected != null) {
-                message.append(TextComponents.field("Selected " + difficulty.getSerializedName(), QuestCommandText.questDefinition(selected.definition())));
+                message.append(TextComponents.field("Selected " + difficulty.getSerializedName(), QuestCommandText.quest(manager, player, selected)));
             }
         }
-        message.append("\n").append(TextComponents.action("[View quests]", "/" + PolyQuest.MOD_ID + " list"));
         source.sendSuccess(() -> message, true);
         return 1;
     }
@@ -107,8 +106,9 @@ public final class RerollCommand extends PolyCommand {
         return switch (result) {
             case CHANGED -> {
                 var selected = manager.dailyAssignment().slots().get(difficulty);
+                var player = source.getPlayerOrException().nameAndId();
                 source.sendSuccess(() -> TextComponents.success("Selected " + difficulty.getSerializedName() + " daily quest")
-                        .append(TextComponents.field("Quest", QuestCommandText.questDefinition(selected.definition()))), true);
+                        .append(TextComponents.field("Quest", QuestCommandText.quest(manager, player, selected))), true);
                 yield 1;
             }
             case ALREADY_SELECTED -> {

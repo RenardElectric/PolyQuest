@@ -122,7 +122,7 @@ public abstract class QuestGui extends SimpleGui {
                 .hideDefaultTooltip()
                 .setName(display.title());
 
-        for (Component line : display.lines()) {
+        for (var line : display.lines()) {
             element.addLoreLine(line);
         }
 
@@ -130,14 +130,11 @@ public abstract class QuestGui extends SimpleGui {
                 .addLoreLine(display.actionHint())
                 .setCallback((_, _, _, _) -> {
                     if (display.claimed()) return;
-                    if (interactionCooldown > 0) return;
                     var result = manager.claim(player, definition.id());
                     if (result.successful()) {
                         playSound(player, SoundEvents.VILLAGER_YES);
-                        player.sendSystemMessage(QuestCommandText.questClaimed(
-                                quest, QuestDisplay.format(manager, manager.server(), player.nameAndId(), quest)
-                                        .hoverText()));
-                    } else {
+                        player.sendSystemMessage(QuestCommandText.questClaimed(manager, player.nameAndId(), quest));
+                    } else if (interactionCooldown <= 0) {
                         playSound(player, SoundEvents.VILLAGER_NO);
                         player.sendSystemMessage(TextComponents.error(result.message()));
                     }

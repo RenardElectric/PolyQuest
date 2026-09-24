@@ -6,11 +6,13 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.NameAndId;
-import org.jspecify.annotations.Nullable;
+import polycube.polycore.text.TextComponents;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.presentation.ConditionText;
+import polycube.polyquest.presentation.QuestDisplay;
+import polycube.polyquest.runtime.QuestManager;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -27,18 +29,6 @@ public final class QuestCommandText {
     private static final int MAX_CLAIMABLE_NAMES = 4;
 
     private QuestCommandText() {}
-
-    public static MutableComponent questDefinition(QuestModel.Definition quest) {
-        return copy(quest.title(), quest.id().toString());
-    }
-
-    public static MutableComponent quest(MinecraftServer server, QuestModel.Occurrence occurrence, QuestModel.AttemptStatus status, @Nullable NameAndId player) {
-        return action(
-                occurrence.definition().title(),
-                "/" + PolyQuest.MOD_ID + " inspect " + occurrence.definition().id() + (player != null ? " " + player.name() : " "),
-                questTooltip(server, occurrence, status).append("\n").append(muted("Click to inspect."))
-        );
-    }
 
     public static MutableComponent status(QuestModel.AttemptStatus status) {
         return colored(statusLabel(status), switch (status) {
@@ -78,9 +68,13 @@ public final class QuestCommandText {
         }).orElse(ChatFormatting.LIGHT_PURPLE);
     }
 
-    public static MutableComponent questName(QuestModel.Occurrence occurrence, Component details) {
-        return hover(styled("[" + occurrence.definition().title() + "]",
-                questColor(occurrence.definition()), true), details);
+    public static MutableComponent quest(QuestManager manager, NameAndId player, QuestModel.Occurrence occurrence) {
+        var server = manager.server();
+        var isAdmin = server.getPlayerList().isOp(player);
+        var details = QuestDisplay.format(manager, server, player, occurrence).hoverText(isAdmin ? TextComponents.muted("Click to inspect.") : null);
+        var text = styled("[" + occurrence.definition().title() + "]", questColor(occurrence.definition()), true);
+        var command = "/" + PolyQuest.MOD_ID + " inspect " + occurrence.definition().id() + " " + player.name();
+        return isAdmin ? action(text, command, details) : hover(text, details);
     }
 
     public static String expiry(QuestModel.Occurrence occurrence) {
@@ -154,23 +148,24 @@ public final class QuestCommandText {
         return message().append("Quests changed.");
     }
 
-    public static MutableComponent questCompleted(QuestModel.Occurrence occurrence, Component details) {
+    public static MutableComponent questCompleted(QuestManager manager, NameAndId player, QuestModel.Occurrence occurrence) {
         return message()
                 .append(colored("Quest completed: ", ChatFormatting.GREEN))
-                .append(questName(occurrence, details))
+                .append(quest(manager, player, occurrence))
                 .append(colored(". Visit the Quest Giver to claim your reward.", ChatFormatting.GRAY));
     }
 
-    public static MutableComponent questClaimed(QuestModel.Occurrence occurrence, Component details) {
+    public static MutableComponent questClaimed(QuestManager manager, NameAndId player, QuestModel.Occurrence occurrence) {
         return message()
                 .append(colored("Successfully claimed quest: ", ChatFormatting.GREEN))
-                .append(questName(occurrence, details))
+                .append(quest(manager, player, occurrence))
                 .append(colored(".", ChatFormatting.GRAY));
     }
 
     /// Keeps the chat summary short while retaining the total count and quest-giver hover details.
     public static Optional<MutableComponent> unclaimedSummary(
-            List<QuestModel.Occurrence> ready, Function<QuestModel.Occurrence, Component> details
+            QuestManager manager, NameAndId player,
+            List<QuestModel.Occurrence> ready
     ) {
         if (ready.isEmpty()) return Optional.empty();
         var message = message();
@@ -179,7 +174,7 @@ public final class QuestCommandText {
         for (int index = 0; index < visible; index++) {
             if (index > 0) message.append(colored(", ", ChatFormatting.GRAY));
             var occurrence = ready.get(index);
-            message.append(questName(occurrence, details.apply(occurrence)));
+            message.append(quest(manager, player, occurrence));
         }
         if (ready.size() > visible) {
             message.append(colored(", ... and " + (ready.size() - visible) + " more", ChatFormatting.GRAY));

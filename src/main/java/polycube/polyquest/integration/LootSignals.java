@@ -2,11 +2,15 @@ package polycube.polyquest.integration;
 
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Container;
+import net.minecraft.world.RandomizableContainer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import org.jspecify.annotations.Nullable;
 import polycube.polyquest.runtime.QuestRuntime;
 import polycube.polyquest.signal.QuestSignal;
@@ -68,6 +72,35 @@ public final class LootSignals {
 
     public static void emitBlockLoot(ServerPlayer player, ServerLevel level, BlockState state, @Nullable BlockEntity blockEntity, Collection<ItemStack> items) {
         emit(player, QuestSignal.LootOrigin.BLOCK, null, new BlockLootSource(level, state, blockEntity), items);
+    }
+
+    /// Attributes newly filled block-container slots to the player who generated the loot table.
+    public static void fillContainerLoot(Container container, LootParams params, Runnable fill) {
+        if (!(container instanceof RandomizableContainer)
+                || !(container instanceof BlockEntity blockEntity)
+                || !(params.contextMap().get(LootContextParams.THIS_ENTITY) instanceof ServerPlayer player)) {
+            fill.run();
+            return;
+        }
+        var generated = newlyFilledItems(container, fill);
+        emitBlockLoot(player, params.getLevel(), blockEntity.getBlockState(), blockEntity, generated);
+    }
+
+    /// Captures only stacks placed in previously empty slots, not existing container contents.
+    static List<ItemStack> newlyFilledItems(Container container, Runnable fill) {
+        var emptyBefore = new boolean[container.getContainerSize()];
+        for (int slot = 0; slot < emptyBefore.length; slot++) {
+            emptyBefore[slot] = container.getItem(slot).isEmpty();
+        }
+        fill.run();
+        var generated = new ArrayList<ItemStack>();
+        for (int slot = 0; slot < emptyBefore.length; slot++) {
+            if (emptyBefore[slot]) {
+                var item = container.getItem(slot);
+                if (!item.isEmpty()) generated.add(item);
+            }
+        }
+        return generated;
     }
 
     private static void emit(

@@ -4,6 +4,9 @@
   "compatibilityLevel": "JAVA_25",
   "mixins": [
     "BlockLootMixin",
+    "BrushableLootMixin",
+    "ContainerLootMixin",
+    "DecoratedPotLootMixin",
     "EntityItemDropMixin",
     "FishingRodHookedTriggerMixin",
     "LivingEntityLootMixin",

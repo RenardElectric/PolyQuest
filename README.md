@@ -151,15 +151,28 @@ For loot from a particular block, use `block` instead of `entity`:
 }
 ```
 
+The same `block` filter also works when a player generates loot by opening a loot-table chest,
+barrel, shulker box, decorated pot or similar block container, or by brushing suspicious sand or
+gravel. For example, to require a diamond generated in a chest:
+
+```json
+{
+  "type": "polyquest:loot_item",
+  "item": { "items": "minecraft:diamond" },
+  "block": { "blocks": "minecraft:chest" }
+}
+```
+
 The `block` object uses Minecraft's block predicate format, including block tags, `state`, `nbt`,
-`components`, and `predicates`. It checks the original block state and block entity at the time
-the player breaks it, even after the world position changes. `entity` and `block` cannot be used
-together. `count` is optional and defaults to `1`. It counts loot events, so one slain entity or
-broken block advances the condition at most once even if it produces several matching stacks. The
+`components`, and `predicates`. It checks the source block state and block entity, including the
+original state when a block is broken. `entity` and `block` cannot be used together. `count` is
+optional and defaults to `1`. It counts loot events, so one slain entity, broken block, generated
+container or brushed block advances the condition at most once even if it produces several matching stacks. The
 nested item predicate can still use its own `count` bounds to constrain the size of a matching
 stack. Omit both source filters to accept the matching item from entity death loot (including
-special and equipment drops), fishing loot, or a block broken by the player. PolyQuest observes
-Minecraft's finalized generated stacks; picking up an unrelated item from the ground does not count.
+special and equipment drops), fishing loot, a block broken by the player, or block-generated loot.
+Only loot-table generation attributed to the player counts; opening an already-filled container,
+world-generation filling, and picking up an unrelated item do not count.
 
 Objectives can be combined with `all_of`, `any_of`, `repeat`, `sequence`, `time_window`, `n_of_m`,
 `optional` and `choice` conditions. Server datapacks control the exact targets, counts and rules.

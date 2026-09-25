@@ -64,7 +64,7 @@ public final class BuiltInConditions {
         }
     }
 
-    /// Counts loot-generation events containing a matching item, optionally restricted to a slain entity or broken block.
+    /// Counts matching generated loot from an entity, fishing, a broken block, or a block container.
     public record LootItem(ItemPredicate item, Optional<EntityPredicate> entity, Optional<BlockPredicate> block, int count, Optional<String> displayName) implements ConditionApi.Definition {
         public LootItem(ItemPredicate item, Optional<EntityPredicate> entity, int count) {
             this(item, entity, Optional.empty(), count, Optional.empty());

@@ -29,7 +29,7 @@ public sealed interface QuestSignal
         BLOCK
     }
 
-    /// Retains the pre-break block context, since the world position may already contain air.
+    /// Retains the source block context, including its pre-break state when applicable.
     record BlockLootSource(ServerLevel level, BlockState state, @Nullable BlockEntity blockEntity) {
         public boolean matches(BlockPredicate predicate) {
             return predicate.matchesState(state) && predicate.matchesBlockEntity(level, blockEntity);

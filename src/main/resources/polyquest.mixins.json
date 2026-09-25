@@ -11,7 +11,8 @@
     "FishingRodHookedTriggerMixin",
     "LivingEntityLootMixin",
     "PlayerAdvancementsMixin",
-    "SimpleCriterionTriggerMixin"
+    "SimpleCriterionTriggerMixin",
+    "VaultLootMixin"
   ],
   "injectors": {
     "defaultRequire": 1

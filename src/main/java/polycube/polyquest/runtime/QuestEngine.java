@@ -52,11 +52,7 @@ public final class QuestEngine implements AutoCloseable {
         for (QuestAttempt attempt : session.attempts()) {
             QuestModel.AttemptStatus before = attempt.status();
             changed |= attempt.onSignal(signal, server).changed();
-            if (becameReady(before, attempt)) {
-                ledger.markReady(playerId, attempt.occurrence());
-                completed.add(new CompletedQuest(playerId, attempt.occurrence()));
-                changed = true;
-            }
+            changed |= recordReadyTransition(playerId, before, attempt, completed);
         }
         return new ProgressResult(changed, completed);
     }
@@ -69,18 +65,22 @@ public final class QuestEngine implements AutoCloseable {
             for (QuestAttempt attempt : entry.getValue().attempts()) {
                 QuestModel.AttemptStatus before = attempt.status();
                 changed |= attempt.tick(server, serverTick).changed();
-                if (becameReady(before, attempt)) {
-                    ledger.markReady(entry.getKey(), attempt.occurrence());
-                    completed.add(new CompletedQuest(entry.getKey(), attempt.occurrence()));
-                    changed = true;
-                }
+                changed |= recordReadyTransition(entry.getKey(), before, attempt, completed);
             }
         }
         return new ProgressResult(changed, completed);
     }
 
-    private static boolean becameReady(QuestModel.AttemptStatus before, QuestAttempt attempt) {
-        return before != QuestModel.AttemptStatus.READY_TO_CLAIM && attempt.status() == QuestModel.AttemptStatus.READY_TO_CLAIM;
+    private boolean recordReadyTransition(
+            UUID playerId, QuestModel.AttemptStatus before, QuestAttempt attempt, List<CompletedQuest> completed
+    ) {
+        if (before == QuestModel.AttemptStatus.READY_TO_CLAIM
+                || attempt.status() != QuestModel.AttemptStatus.READY_TO_CLAIM) {
+            return false;
+        }
+        ledger.markReady(playerId, attempt.occurrence());
+        completed.add(new CompletedQuest(playerId, attempt.occurrence()));
+        return true;
     }
 
     record CompletedQuest(UUID playerId, QuestModel.Occurrence occurrence) {}
@@ -166,6 +166,14 @@ public final class QuestEngine implements AutoCloseable {
         var session = sessions.get(player.getUUID());
         if (session == null) return new ProgressResult(false, List.of());
 
+        var activeAttempts = new ArrayList<QuestAttempt>();
+        for (var attempt : session.attempts()) {
+            if (attempt.status() == QuestModel.AttemptStatus.ACTIVE) {
+                activeAttempts.add(attempt);
+            }
+        }
+        if (activeAttempts.isEmpty()) return new ProgressResult(false, List.of());
+
         var tick = server.getTickCount();
         var unlocked = server.getAdvancements().getAllAdvancements().stream()
                 .filter(holder -> player.getAdvancements().getOrStartProgress(holder).isDone())
@@ -173,13 +181,10 @@ public final class QuestEngine implements AutoCloseable {
                 .toList();
         var completed = new ArrayList<CompletedQuest>();
         var changed = false;
-        for (var attempt : session.attempts()) {
+        for (var attempt : activeAttempts) {
             var before = attempt.status();
             changed |= attempt.reconcileAdvancements(unlocked, server).changed();
-            if (becameReady(before, attempt)) {
-                ledger.markReady(player.getUUID(), attempt.occurrence());
-                completed.add(new CompletedQuest(player.getUUID(), attempt.occurrence()));
-            }
+            changed |= recordReadyTransition(player.getUUID(), before, attempt, completed);
         }
         return new ProgressResult(changed, completed);
     }

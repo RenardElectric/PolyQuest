@@ -89,6 +89,7 @@ public final class QuestAttempt {
         do {
             progressed = false;
             for (var signal : signals) {
+                if (terminal()) return result;
                 var update = reconcileAdvancement(signal, server);
                 result = result.merge(update);
                 progressed |= update.changed();

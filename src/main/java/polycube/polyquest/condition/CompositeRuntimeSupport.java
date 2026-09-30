@@ -3,6 +3,7 @@ package polycube.polyquest.condition;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import polycube.polyquest.runtime.ConditionRuntime;
+import polycube.polyquest.runtime.ProgressState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,6 +47,16 @@ final class CompositeRuntimeSupport {
         @Override
         public void reset() {
             children.forEach(ConditionRuntime.Instance::reset);
+        }
+
+        @Override
+        public void writeProgress(ProgressState.Writer writer) {
+            children.forEach(child -> child.writeProgress(writer));
+        }
+
+        @Override
+        public void readProgress(ProgressState.Reader reader) {
+            children.forEach(child -> child.readProgress(reader));
         }
 
         @Override

@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 import polycube.polyquest.runtime.ConditionRuntime;
+import polycube.polyquest.runtime.ProgressState;
 import polycube.polyquest.signal.QuestSignal;
 
 final class CompositeConditionsTest {
@@ -175,6 +176,12 @@ final class CompositeConditionsTest {
         @Override
         public void reset() {
         }
+
+        @Override
+        public void writeProgress(ProgressState.Writer writer) {}
+
+        @Override
+        public void readProgress(ProgressState.Reader reader) {}
 
         @Override
         public JsonObject diagnostic() {

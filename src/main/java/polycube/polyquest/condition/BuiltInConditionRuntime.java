@@ -9,6 +9,7 @@ import net.minecraft.util.Prediction;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 import polycube.polyquest.runtime.ConditionRuntime;
+import polycube.polyquest.runtime.ProgressState;
 import polycube.polyquest.signal.QuestSignal;
 
 import java.util.ArrayList;
@@ -46,6 +47,16 @@ final class BuiltInConditionRuntime {
         public void reset() {
             completed = false;
         }
+
+        @Override
+        public void writeProgress(ProgressState.Writer writer) {
+            writer.booleanValue(completed);
+        }
+
+        @Override
+        public void readProgress(ProgressState.Reader reader) {
+            completed = reader.booleanValue();
+        }
     }
 
     /// A base class for conditions that track a numeric count of progress toward completion.
@@ -74,6 +85,18 @@ final class BuiltInConditionRuntime {
         public void reset() {
             super.reset();
             current = 0;
+        }
+
+        @Override
+        public void writeProgress(ProgressState.Writer writer) {
+            if (target == 1) writer.booleanValue(completed);
+            else writer.unsignedInt(current);
+        }
+
+        @Override
+        public void readProgress(ProgressState.Reader reader) {
+            current = target == 1 ? (reader.booleanValue() ? 1 : 0) : reader.unsignedInt(target);
+            completed = current == target;
         }
 
         @Override
@@ -118,6 +141,12 @@ final class BuiltInConditionRuntime {
         }
 
         @Override
+        public void readProgress(ProgressState.Reader reader) {
+            super.readProgress(reader);
+            if (completed) registration.deactivate();
+        }
+
+        @Override
         public JsonObject diagnostic() {
             JsonObject result = super.diagnostic();
             result.addProperty("trigger", String.valueOf(BuiltInRegistries.TRIGGER_TYPES.getKey(definition.criterion().trigger())));
@@ -138,6 +167,12 @@ final class BuiltInConditionRuntime {
         public ConditionRuntime.Update onSignal(QuestSignal signal, ConditionRuntime.EvaluationContext context) {
             return ConditionRuntime.Update.NONE;
         }
+
+        @Override
+        public void writeProgress(ProgressState.Writer writer) {}
+
+        @Override
+        public void readProgress(ProgressState.Reader reader) {}
 
         @Override
         public ConditionRuntime.ClaimPreparation prepareClaim(ConditionRuntime.ClaimContext context) {

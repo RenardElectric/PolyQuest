@@ -2,6 +2,7 @@ package polycube.polyquest.condition;
 
 import com.google.gson.JsonObject;
 import polycube.polyquest.runtime.ConditionRuntime;
+import polycube.polyquest.runtime.ProgressState;
 import polycube.polyquest.signal.QuestSignal;
 
 import java.util.Optional;
@@ -86,6 +87,18 @@ final class FlowCompositeRuntime {
         }
 
         @Override
+        public void writeProgress(ProgressState.Writer writer) {
+            writer.unsignedInt(completedIterations);
+            child.writeProgress(writer);
+        }
+
+        @Override
+        public void readProgress(ProgressState.Reader reader) {
+            completedIterations = reader.unsignedInt(definition.times());
+            child.readProgress(reader);
+        }
+
+        @Override
         public void close() {
             child.close();
         }
@@ -163,6 +176,18 @@ final class FlowCompositeRuntime {
             super.reset();
             index = 0;
             advancePastCompletedChildren();
+        }
+
+        @Override
+        public void writeProgress(ProgressState.Writer writer) {
+            writer.unsignedInt(index);
+            super.writeProgress(writer);
+        }
+
+        @Override
+        public void readProgress(ProgressState.Reader reader) {
+            index = reader.unsignedInt(children.size());
+            super.readProgress(reader);
         }
 
         /// Moves to the next sequence step and initializes it from a clean state.
@@ -325,6 +350,36 @@ final class FlowCompositeRuntime {
                     : -1L;
             attempts = 0;
             exhausted = false;
+        }
+
+        @Override
+        public void writeProgress(ProgressState.Writer writer) {
+            writer.unsignedInt(attempts);
+            writer.booleanValue(exhausted);
+            writer.booleanValue(deadline >= 0L);
+            if (deadline >= 0L) {
+                long remainingTicks = Math.max(0L, deadline - writer.serverTick());
+                long safeTicks = Math.min(remainingTicks, (Long.MAX_VALUE - writer.epochMillis()) / 50L);
+                writer.unsignedLong(writer.epochMillis() + safeTicks * 50L);
+            }
+            child.writeProgress(writer);
+            startCondition.ifPresent(start -> start.writeProgress(writer));
+        }
+
+        @Override
+        public void readProgress(ProgressState.Reader reader) {
+            attempts = reader.unsignedInt(Integer.MAX_VALUE);
+            exhausted = reader.booleanValue();
+            if (reader.booleanValue()) {
+                long remainingMillis = reader.unsignedLong() - reader.epochMillis();
+                long remainingTicks = remainingMillis <= 0L ? 0L
+                        : remainingMillis / 50L + (remainingMillis % 50L == 0L ? 0L : 1L);
+                deadline = Math.min(Long.MAX_VALUE - reader.serverTick(), remainingTicks) + reader.serverTick();
+            } else {
+                deadline = -1L;
+            }
+            child.readProgress(reader);
+            startCondition.ifPresent(start -> start.readProgress(reader));
         }
 
         @Override

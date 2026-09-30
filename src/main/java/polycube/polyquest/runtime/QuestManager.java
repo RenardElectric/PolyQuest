@@ -41,6 +41,7 @@ public final class QuestManager {
         this.claims = new QuestClaimService(server, engine, ledger, catalogs, questChanges::changed);
         this.catalogSubscription = this.catalogs.addListener(this::onCatalogChanged);
         refreshRotationAndEngine();
+        engine.pruneUnavailableProgress();
     }
 
     public MinecraftServer server() {

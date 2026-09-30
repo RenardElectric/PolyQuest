@@ -3,6 +3,7 @@ package polycube.polyquest.condition;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import polycube.polyquest.runtime.ConditionRuntime;
+import polycube.polyquest.runtime.ProgressState;
 import polycube.polyquest.signal.QuestSignal;
 
 import java.util.Comparator;
@@ -192,6 +193,16 @@ final class LogicalCompositeRuntime {
         }
 
         @Override
+        public void writeProgress(ProgressState.Writer writer) {
+            child.writeProgress(writer);
+        }
+
+        @Override
+        public void readProgress(ProgressState.Reader reader) {
+            child.readProgress(reader);
+        }
+
+        @Override
         public void close() {
             child.close();
         }
@@ -292,6 +303,20 @@ final class LogicalCompositeRuntime {
         public void reset() {
             selected = -1;
             branches.forEach(ConditionRuntime.Instance::reset);
+        }
+
+        @Override
+        public void writeProgress(ProgressState.Writer writer) {
+            writer.unsignedInt(selected + 1);
+            if (selected >= 0) branches.get(selected).writeProgress(writer);
+            else branches.forEach(branch -> branch.writeProgress(writer));
+        }
+
+        @Override
+        public void readProgress(ProgressState.Reader reader) {
+            selected = reader.unsignedInt(branches.size()) - 1;
+            if (selected >= 0) branches.get(selected).readProgress(reader);
+            else branches.forEach(branch -> branch.readProgress(reader));
         }
 
         @Override

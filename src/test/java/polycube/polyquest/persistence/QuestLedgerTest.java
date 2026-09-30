@@ -1,6 +1,7 @@
 package polycube.polyquest.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -93,6 +94,56 @@ final class QuestLedgerTest {
         restored.complete(pending);
         assertTrue(restored.isClaimed(playerId, occurrence.key()));
         assertFalse(restored.isReady(playerId, occurrence));
+    }
+
+    @Test
+    void partialProgressSurvivesWorldSaveAndIsRemovedOnCompletion() {
+        UUID playerId = UUID.randomUUID();
+        QuestModel.Occurrence occurrence = occurrence("partial_progress");
+        QuestLedger ledger = new QuestLedger();
+        byte[] state = {1, 3, 7};
+        ledger.saveProgress(playerId, occurrence, state);
+        state[0] = 99;
+
+        var saved = QuestLedger.CODEC.encodeStart(NbtOps.INSTANCE, ledger).getOrThrow();
+        QuestLedger restored = QuestLedger.CODEC.parse(NbtOps.INSTANCE, saved).getOrThrow();
+        assertArrayEquals(new byte[] {1, 3, 7}, restored.progressFor(playerId, occurrence).orElseThrow());
+
+        restored.markReady(playerId, occurrence);
+        assertTrue(restored.progressFor(playerId, occurrence).isEmpty());
+        assertTrue(restored.isReady(playerId, occurrence));
+    }
+
+    @Test
+    void removedOrChangedQuestDropsOnlyItsOwnPartialProgress() {
+        UUID playerId = UUID.randomUUID();
+        var removed = occurrence("removed_progress");
+        var changed = occurrence("changed_progress", "before");
+        var kept = occurrence("kept_progress");
+        QuestLedger ledger = new QuestLedger();
+        for (var occurrence : List.of(removed, changed, kept)) {
+            ledger.saveProgress(playerId, occurrence, new byte[] {1});
+        }
+
+        ledger.retainProgress(List.of(occurrence("changed_progress", "after"), kept));
+        assertTrue(ledger.progressFor(playerId, removed).isEmpty());
+        assertTrue(ledger.progressFor(playerId, changed).isEmpty());
+        assertArrayEquals(new byte[] {1}, ledger.progressFor(playerId, kept).orElseThrow());
+    }
+
+    @Test
+    void cancelledClaimKeepsPartialProgressUntilAClaimSucceeds() {
+        UUID playerId = UUID.randomUUID();
+        var occurrence = occurrence("claim_retry_progress");
+        QuestLedger ledger = new QuestLedger();
+        ledger.saveProgress(playerId, occurrence, new byte[] {1, 2});
+
+        var cancelled = ledger.beginClaim(playerId, occurrence, List.of());
+        ledger.cancel(cancelled);
+        assertArrayEquals(new byte[] {1, 2}, ledger.progressFor(playerId, occurrence).orElseThrow());
+
+        ledger.complete(ledger.beginClaim(playerId, occurrence, List.of()));
+        assertTrue(ledger.progressFor(playerId, occurrence).isEmpty());
     }
 
     @Test
@@ -244,6 +295,24 @@ final class QuestLedgerTest {
         assertEquals(DailyRotationService.RerollResult.CHANGED,
                 rotation.reroll(QuestModel.Difficulty.EASY, Optional.of(before.definition().id()), catalog, ledger));
         assertFalse(ledger.isClaimed(player, rotation.current().slots().get(QuestModel.Difficulty.EASY).key()));
+    }
+
+    @Test
+    void rerollDropsActiveDailyProgress() {
+        QuestLedger ledger = new QuestLedger();
+        QuestModel.Definition first = daily("progress_first");
+        QuestModel.Definition second = daily("progress_second");
+        QuestModel.Catalog catalog = new QuestModel.Catalog(Map.of(first.id(), first, second.id(), second), Map.of());
+        DailyRotationService rotation = new DailyRotationService(config(),
+                Clock.fixed(Instant.parse("2026-09-21T01:00:00Z"), ZoneId.of("UTC")));
+        rotation.refresh(catalog, ledger);
+        var before = rotation.current().slots().get(QuestModel.Difficulty.EASY);
+        UUID player = UUID.randomUUID();
+        ledger.saveProgress(player, before, new byte[] {1});
+
+        assertEquals(DailyRotationService.RerollResult.CHANGED,
+                rotation.reroll(QuestModel.Difficulty.EASY, Optional.empty(), catalog, ledger));
+        assertTrue(ledger.progressFor(player, before).isEmpty());
     }
 
     @Test

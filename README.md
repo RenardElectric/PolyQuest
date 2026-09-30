@@ -77,8 +77,9 @@ then see [Adding quests](#adding-quests).
 - Unique quests never expire, and a successfully claimed reward cannot be claimed again.
 
 > [!IMPORTANT]
-> Partial quest progress is not saved across server restarts. Completed but unclaimed current quests,
-> successful claims, pending rewards, and the current daily assignments are saved with the world.
+> Partial quest progress survives server restarts. It is removed when its quest completes, changes
+> behavior, or leaves the active daily or unique catalog. Completed but unclaimed quests, claims,
+> pending rewards, and daily assignments are also saved with the world.
 
 ## Quests and rewards
 
@@ -290,11 +291,12 @@ completion where applicable.
 
 ### Stored data
 
-- Current daily quest IDs and next-roll times, claimed current occurrences, unclaimed completions,
-  and unfinished transactions are persistent world data under PolyQuest's `ledger` entry.
+- Current daily quest IDs and next-roll times, active attempt progress, claimed current occurrences,
+  unclaimed completions, and unfinished transactions are world data under PolyQuest's `ledger` entry.
 - Unclaimed completions store only each quest ID and behavior hash per player; the daily slot already
   stores its difficulty and next-roll time.
-- Attempt progress is intentionally session-only and is lost when the server restarts.
+- Active attempt progress uses a compact binary condition snapshot tied to its occurrence and
+  behavior hash; it is discarded on completion, rotation, or a behavior-changing edit.
 - Rotating one difficulty clears its attempts, unclaimed completions, claims, and unfinished
   transactions. Already-granted rewards are not reversed; unique quests are unaffected.
 - Players receive one generic quest-change notice when assignments or active progress reset. Players

@@ -15,12 +15,13 @@ import polycube.polyquest.PolyQuest;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.reward.RewardApi;
 
+import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.*;
 import java.util.function.Function;
 
 /// Durable world-owned quest state stored through Minecraft's SavedData system.
-/// Partial attempt progress is intentionally absent; unclaimed completions are retained.
+/// Active attempt progress, unclaimed completions, and claims are stored in the world.
 public final class QuestLedger extends SavedData {
     private static final Codec<Integer> NON_NEGATIVE_INT = Codec.INT.comapFlatMap(
             value -> value >= 0
@@ -31,6 +32,13 @@ public final class QuestLedger extends SavedData {
     private static final Codec<Map<UUID, Set<String>>> CLAIMS_CODEC = Codec.unboundedMap(UUIDUtil.STRING_CODEC, CLAIM_SET_CODEC);
     private static final Codec<Map<UUID, Map<Identifier, String>>> READY_CODEC = Codec.unboundedMap(
             UUIDUtil.STRING_CODEC, Codec.unboundedMap(Identifier.CODEC, Codec.STRING));
+    private static final Codec<byte[]> PROGRESS_BYTES_CODEC = Codec.BYTE_BUFFER.xmap(buffer -> {
+        byte[] bytes = new byte[buffer.remaining()];
+        buffer.get(bytes);
+        return bytes;
+    }, ByteBuffer::wrap);
+    private static final Codec<Map<UUID, Map<String, PartialProgress>>> PROGRESS_CODEC = Codec.unboundedMap(
+            UUIDUtil.STRING_CODEC, Codec.unboundedMap(Codec.STRING, PartialProgress.CODEC));
     private static final Codec<Map<QuestModel.Difficulty, RotationSlot>> ROTATION_CODEC =
             Codec.unboundedMap(QuestModel.Difficulty.CODEC, RotationSlot.CODEC);
     private static final Codec<Set<UUID>> UUID_SET_CODEC = UUIDUtil.STRING_CODEC.listOf().xmap(HashSet::new, values -> values.stream().sorted().toList());
@@ -40,7 +48,8 @@ public final class QuestLedger extends SavedData {
             UUID_SET_CODEC.optionalFieldOf("rotation_notified_players").forGetter(ledger -> ledger.rotationNotifiedPlayers),
             CLAIMS_CODEC.optionalFieldOf("claims", Map.of()).forGetter(ledger -> ledger.claims),
             PendingTransaction.CODEC.listOf().optionalFieldOf("pending", List.of()).forGetter(ledger -> List.copyOf(ledger.pending.values())),
-            READY_CODEC.optionalFieldOf("ready", Map.of()).forGetter(QuestLedger::readyCompletions)
+            READY_CODEC.optionalFieldOf("ready", Map.of()).forGetter(QuestLedger::readyCompletions),
+            PROGRESS_CODEC.optionalFieldOf("progress", Map.of()).forGetter(ledger -> ledger.progress)
     ).apply(instance, QuestLedger::new));
 
     private static final SavedDataType<QuestLedger> TYPE = new SavedDataType<>(
@@ -53,6 +62,7 @@ public final class QuestLedger extends SavedData {
     private final Map<UUID, PendingTransaction> pending = new LinkedHashMap<>();
     private final Map<UUID, List<PendingTransaction>> pendingByPlayer = new HashMap<>();
     private final Map<UUID, Map<Identifier, ReadyCompletion>> ready = new HashMap<>();
+    private final Map<UUID, Map<String, PartialProgress>> progress = new HashMap<>();
     private final EnumMap<QuestModel.Difficulty, RotationSlot> rotationSlots = new EnumMap<>(QuestModel.Difficulty.class);
     // An absent list means no change has occurred yet; a present empty list means everyone needs the notice.
     private Optional<Set<UUID>> rotationNotifiedPlayers = Optional.empty();
@@ -62,7 +72,8 @@ public final class QuestLedger extends SavedData {
     private QuestLedger(
             Map<QuestModel.Difficulty, RotationSlot> rotationSlots,
             Optional<Set<UUID>> rotationNotifiedPlayers, Map<UUID, Set<String>> claims,
-            List<PendingTransaction> pendingTransactions, Map<UUID, Map<Identifier, String>> readyCompletions
+            List<PendingTransaction> pendingTransactions, Map<UUID, Map<Identifier, String>> readyCompletions,
+            Map<UUID, Map<String, PartialProgress>> progress
     ) {
         this();
         this.rotationSlots.putAll(rotationSlots);
@@ -71,6 +82,7 @@ public final class QuestLedger extends SavedData {
         pendingTransactions.forEach(this::putPending);
         readyCompletions.forEach((playerId, completions) -> completions.forEach((questId, hash) ->
                 putReady(new ReadyCompletion(playerId, questId, hash))));
+        progress.forEach((playerId, attempts) -> this.progress.put(playerId, new HashMap<>(attempts)));
     }
 
     public static QuestLedger load(MinecraftServer server) {
@@ -86,7 +98,40 @@ public final class QuestLedger extends SavedData {
     public void markReady(UUID playerId, QuestModel.Occurrence occurrence) {
         var completion = new ReadyCompletion(playerId, occurrence.definition().id(), occurrence.definition().behaviorHash());
         putReady(completion);
+        clearProgress(playerId, occurrence.key());
         setDirty();
+    }
+
+    public Optional<byte[]> progressFor(UUID playerId, QuestModel.Occurrence occurrence) {
+        var saved = progress.getOrDefault(playerId, Map.of()).get(occurrence.key().persistentKey());
+        return saved != null && saved.behaviorHash().equals(occurrence.definition().behaviorHash())
+                ? Optional.of(saved.state().clone()) : Optional.empty();
+    }
+
+    public void saveProgress(UUID playerId, QuestModel.Occurrence occurrence, byte[] state) {
+        progress.computeIfAbsent(playerId, ignored -> new HashMap<>())
+                .put(occurrence.key().persistentKey(), new PartialProgress(occurrence.definition().behaviorHash(), state.clone()));
+        setDirty();
+    }
+
+    public boolean clearProgress(UUID playerId, QuestModel.Key key) {
+        var attempts = progress.get(playerId);
+        if (attempts == null || attempts.remove(key.persistentKey()) == null) return false;
+        if (attempts.isEmpty()) progress.remove(playerId);
+        setDirty();
+        return true;
+    }
+
+    /// Removes state for unavailable occurrences or definitions whose behavior changed.
+    public void retainProgress(Collection<QuestModel.Occurrence> available) {
+        Map<String, String> hashes = new HashMap<>();
+        available.forEach(occurrence -> hashes.put(occurrence.key().persistentKey(), occurrence.definition().behaviorHash()));
+        boolean changed = false;
+        for (var player : progress.entrySet()) {
+            changed |= player.getValue().entrySet().removeIf(entry -> !entry.getValue().behaviorHash().equals(hashes.get(entry.getKey())));
+        }
+        changed |= progress.values().removeIf(Map::isEmpty);
+        if (changed) setDirty();
     }
 
     public boolean isReady(UUID playerId, QuestModel.Occurrence occurrence) {
@@ -188,6 +233,11 @@ public final class QuestLedger extends SavedData {
         var removed = pending.remove(transaction.id());
         if (removed == null) return;
         claims.computeIfAbsent(removed.playerId(), ignored -> new HashSet<>()).add(removed.occurrenceKey());
+        var playerProgress = progress.get(removed.playerId());
+        if (playerProgress != null) {
+            playerProgress.remove(removed.occurrenceKey());
+            if (playerProgress.isEmpty()) progress.remove(removed.playerId());
+        }
         clearReady(removed.playerId(), removed.questId());
         unindexPending(removed);
         setDirty();
@@ -230,7 +280,7 @@ public final class QuestLedger extends SavedData {
     }
 
     public boolean resetClaim(UUID playerId, QuestModel.Key occurrence) {
-        var changed = clearReady(playerId, occurrence.questId());
+        var changed = clearReady(playerId, occurrence.questId()) | clearProgress(playerId, occurrence);
         Set<String> playerClaims = claims.get(playerId);
         if (playerClaims != null && playerClaims.remove(occurrence.persistentKey())) {
             if (playerClaims.isEmpty()) {
@@ -274,6 +324,8 @@ public final class QuestLedger extends SavedData {
             nextQuestId.ifPresent(playerReady::remove);
         });
         ready.values().removeIf(Map::isEmpty);
+        progress.values().forEach(playerProgress -> playerProgress.keySet().removeIf(key -> key.contains(scope)));
+        progress.values().removeIf(Map::isEmpty);
         for (PendingTransaction transaction : List.copyOf(pending.values())) {
             if (transaction.occurrenceKey().contains(scope)) {
                 PolyQuest.LOGGER.warn("Cancelling unfinished daily quest transaction {} after {} rotation; {} rewards were already granted",
@@ -284,6 +336,13 @@ public final class QuestLedger extends SavedData {
     }
 
     public record ReadyCompletion(UUID playerId, Identifier questId, String behaviorHash) {}
+
+    public record PartialProgress(String behaviorHash, byte[] state) {
+        private static final Codec<PartialProgress> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+                Codec.STRING.fieldOf("hash").forGetter(PartialProgress::behaviorHash),
+                PROGRESS_BYTES_CODEC.fieldOf("state").forGetter(PartialProgress::state)
+        ).apply(instance, PartialProgress::new));
+    }
 
     /// Records delivery once per player for the current rotation, including across restarts.
     public boolean markRotationNotified(UUID playerId) {

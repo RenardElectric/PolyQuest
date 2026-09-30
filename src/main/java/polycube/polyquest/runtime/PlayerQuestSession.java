@@ -11,7 +11,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
 
-/// In-memory, restart-discarded quest attempts for one player UUID.
+/// Live quest attempts for one player UUID, rebuilt from saved progress after restart.
 public final class PlayerQuestSession {
     private final UUID playerId;
     private final ConditionRuntime.CriterionRegistrar criteria;

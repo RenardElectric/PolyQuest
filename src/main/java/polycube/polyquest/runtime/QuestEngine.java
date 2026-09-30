@@ -51,8 +51,10 @@ public final class QuestEngine implements AutoCloseable {
         var completed = new ArrayList<>(activation.completed());
         for (QuestAttempt attempt : session.attempts()) {
             QuestModel.AttemptStatus before = attempt.status();
-            changed |= attempt.onSignal(signal, server).changed();
+            var update = attempt.onSignal(signal, server);
+            changed |= update.changed();
             changed |= recordReadyTransition(playerId, before, attempt, completed);
+            saveProgressIfNeeded(playerId, attempt, update);
         }
         return new ProgressResult(changed, completed);
     }
@@ -64,8 +66,10 @@ public final class QuestEngine implements AutoCloseable {
         for (var entry : sessions.entrySet()) {
             for (QuestAttempt attempt : entry.getValue().attempts()) {
                 QuestModel.AttemptStatus before = attempt.status();
-                changed |= attempt.tick(server, serverTick).changed();
+                var update = attempt.tick(server, serverTick);
+                changed |= update.changed();
                 changed |= recordReadyTransition(entry.getKey(), before, attempt, completed);
+                saveProgressIfNeeded(entry.getKey(), attempt, update);
             }
         }
         return new ProgressResult(changed, completed);
@@ -81,6 +85,12 @@ public final class QuestEngine implements AutoCloseable {
         ledger.markReady(playerId, attempt.occurrence());
         completed.add(new CompletedQuest(playerId, attempt.occurrence()));
         return true;
+    }
+
+    private void saveProgressIfNeeded(UUID playerId, QuestAttempt attempt, ConditionRuntime.Update update) {
+        if (update.changed() && attempt.status() != QuestModel.AttemptStatus.READY_TO_CLAIM) {
+            ledger.saveProgress(playerId, attempt.occurrence(), attempt.saveProgress(server.getTickCount()));
+        }
     }
 
     record CompletedQuest(UUID playerId, QuestModel.Occurrence occurrence) {}
@@ -104,9 +114,20 @@ public final class QuestEngine implements AutoCloseable {
 
     /// Gets the mutable attempt and projects any durable claimed or pending state onto it.
     public QuestAttempt attempt(UUID playerId, QuestModel.Occurrence occurrence) {
-        var attempt = sessions
-                .computeIfAbsent(playerId, id -> new PlayerQuestSession(id, criteria))
-                .getOrCreate(occurrence, server);
+        var session = sessions.computeIfAbsent(playerId, id -> new PlayerQuestSession(id, criteria));
+        var attempt = session.get(occurrence.key()).orElseGet(() -> {
+            QuestAttempt fresh = session.getOrCreate(occurrence, server);
+            if (!ledger.isClaimed(playerId, occurrence.key()) && !ledger.isReady(playerId, occurrence)) {
+                ledger.progressFor(playerId, occurrence).ifPresent(saved -> {
+                    if (!fresh.restoreProgress(saved, server.getTickCount())) {
+                        ledger.clearProgress(playerId, occurrence.key());
+                    } else if (fresh.status() == QuestModel.AttemptStatus.READY_TO_CLAIM && !ledger.hasPending(playerId, occurrence.key())) {
+                        ledger.markReady(playerId, occurrence);
+                    }
+                });
+            }
+            return fresh;
+        });
         if (ledger.isClaimed(playerId, occurrence.key())) {
             attempt.markClaimed();
         } else if (ledger.hasPending(playerId, occurrence.key())) {
@@ -125,6 +146,7 @@ public final class QuestEngine implements AutoCloseable {
     /// Rebuilds availability and discards daily attempts whose occurrence is no longer active.
     void rotationChanged(Set<QuestModel.Difficulty> resetSlots) {
         rebuildAvailableOccurrences();
+        pruneUnavailableProgress();
         ledger.retainReadyCompletions(activeBehaviorHashes());
         Set<QuestModel.Key> activeKeys = rotation.current().slots().values().stream()
                 .map(QuestModel.Occurrence::key)
@@ -183,8 +205,10 @@ public final class QuestEngine implements AutoCloseable {
         var changed = false;
         for (var attempt : activeAttempts) {
             var before = attempt.status();
-            changed |= attempt.reconcileAdvancements(unlocked, server).changed();
+            var update = attempt.reconcileAdvancements(unlocked, server);
+            changed |= update.changed();
             changed |= recordReadyTransition(player.getUUID(), before, attempt, completed);
+            saveProgressIfNeeded(player.getUUID(), attempt, update);
         }
         return new ProgressResult(changed, completed);
     }
@@ -192,6 +216,7 @@ public final class QuestEngine implements AutoCloseable {
     /// Reconciles live attempts with a reloaded catalog and reports players whose progress was reset due to a behavior change.
     List<UUID> onCatalogChanged(QuestCatalogManager.Update update) {
         rebuildAvailableOccurrences();
+        pruneUnavailableProgress();
         Map<QuestModel.Key, QuestModel.Occurrence> currentOccurrences = new LinkedHashMap<>();
         for (QuestModel.Occurrence occurrence : availableOccurrences) {
             currentOccurrences.put(occurrence.key(), occurrence);
@@ -236,6 +261,10 @@ public final class QuestEngine implements AutoCloseable {
             occurrences.add(new QuestModel.Occurrence(key, definition, Instant.EPOCH, Optional.empty()));
         }
         availableOccurrences = List.copyOf(occurrences);
+    }
+
+    void pruneUnavailableProgress() {
+        ledger.retainProgress(availableOccurrences);
     }
 
     private boolean durablyCompleted(UUID playerId, QuestModel.Key key) {

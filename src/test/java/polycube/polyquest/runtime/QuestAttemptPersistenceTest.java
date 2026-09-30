@@ -31,6 +31,67 @@ final class QuestAttemptPersistenceTest {
     }
 
     @Test
+    void unfinishedMultiStepQuestResumesFromCompactSavedProgress() {
+        Identifier first = Identifier.fromNamespaceAndPath("polyquest_test", "first_disc");
+        Identifier second = Identifier.fromNamespaceAndPath("polyquest_test", "second_disc");
+        var condition = new CompositeConditions.AllOf(List.of(
+                new BuiltInConditions.ExplicitSignal(first, 1),
+                new BuiltInConditions.ExplicitSignal(second, 1)));
+        var original = attemptFor(condition);
+        assertTrue(original.onSignal(new QuestSignal.Explicit(null, 1L, first), null).changed());
+
+        byte[] saved = original.saveProgress(1L);
+        assertTrue(saved.length <= 3, "Two completed flags should share one byte");
+        var restored = attemptFor(condition);
+        assertTrue(restored.restoreProgress(saved, 100L));
+        var children = restored.diagnostic().getAsJsonObject("condition").getAsJsonArray("children");
+        assertTrue(children.get(0).getAsJsonObject().get("completed").getAsBoolean());
+        assertFalse(children.get(1).getAsJsonObject().get("completed").getAsBoolean());
+
+        assertTrue(restored.onSignal(new QuestSignal.Explicit(null, 101L, second), null).changed());
+        assertEquals(QuestModel.AttemptStatus.READY_TO_CLAIM, restored.status());
+    }
+
+    @Test
+    void savedAdvancementReconciliationDoesNotCountTheSameUnlockTwice() {
+        Identifier advancementId = Identifier.fromNamespaceAndPath("polyquest_test", "saved_unlock");
+        var holder = new Advancement.Builder()
+                .addCriterion("unlock", PlayerTrigger.TriggerInstance.tick()).build(advancementId);
+        var condition = new CompositeConditions.Repeat(
+                new BuiltInConditions.ObtainAdvancement(advancementId), 2);
+        var original = attemptFor(condition);
+        assertTrue(original.reconcileAdvancement(new QuestSignal.Advancement(null, 1L, holder), null).changed());
+
+        var restored = attemptFor(condition);
+        assertTrue(restored.restoreProgress(original.saveProgress(1L), 100L));
+        assertEquals(1, restored.diagnostic().getAsJsonObject("condition").get("iterations").getAsInt());
+        assertFalse(restored.reconcileAdvancement(new QuestSignal.Advancement(null, 101L, holder), null).changed());
+        assertEquals(1, restored.diagnostic().getAsJsonObject("condition").get("iterations").getAsInt());
+    }
+
+    @Test
+    void expiredTimeWindowStillExpiresAfterRestart() {
+        Identifier signalId = Identifier.fromNamespaceAndPath("polyquest_test", "timed_progress");
+        var condition = new CompositeConditions.TimeWindow(
+                new BuiltInConditions.ExplicitSignal(signalId, 2), 10L,
+                CompositeConditions.StartPolicy.FIRST_PROGRESS, Optional.empty(),
+                CompositeConditions.TimeoutAction.EXHAUST, 1);
+        var original = ConditionRuntime.create(condition, new ConditionRuntime.CreationContext(() -> 100L));
+        original.onSignal(new QuestSignal.Explicit(null, 100L, signalId),
+                new ConditionRuntime.EvaluationContext(null, 100L));
+        var writer = new ProgressState.Writer(100L, 1_000L);
+        original.writeProgress(writer);
+
+        var restored = ConditionRuntime.create(condition, new ConditionRuntime.CreationContext(() -> 500L));
+        var reader = new ProgressState.Reader(writer.bytes(), 500L, 1_600L);
+        restored.readProgress(reader);
+        reader.finish();
+        assertTrue(restored.tick(new ConditionRuntime.EvaluationContext(null, 501L)).changed());
+        assertTrue(restored.exhausted());
+        assertEquals(0, restored.diagnostic().getAsJsonObject("child").get("current").getAsInt());
+    }
+
+    @Test
     void restoredCompletionRemainsClaimableEvenWhenFreshCriterionCannotReplay() {
         Identifier id = Identifier.fromNamespaceAndPath("polyquest_test", "one_shot_criterion");
         var criterion = new BuiltInConditions.AdvancementCriterion(PlayerTrigger.TriggerInstance.tick());
@@ -210,5 +271,11 @@ final class QuestAttemptPersistenceTest {
 
         @Override
         public void reset() {}
+
+        @Override
+        public void writeProgress(ProgressState.Writer writer) {}
+
+        @Override
+        public void readProgress(ProgressState.Reader reader) {}
     }
 }

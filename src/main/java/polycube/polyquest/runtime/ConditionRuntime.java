@@ -78,6 +78,12 @@ public final class ConditionRuntime {
         /// Resets the instance state to its initial state, allowing it to be reused.
         void reset();
 
+        /// Writes mutable progress in definition order; stateless conditions write nothing.
+        void writeProgress(ProgressState.Writer writer);
+
+        /// Restores progress written by the same condition definition.
+        void readProgress(ProgressState.Reader reader);
+
         /// Releases external listeners owned by this runtime subtree.
         default void close() {}
 

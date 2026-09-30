@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
+import polycube.polyquest.PolyQuest;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.signal.QuestSignal;
 
@@ -15,6 +16,7 @@ import java.util.UUID;
 
 /// Mutable progress for one player and one quest occurrence.
 public final class QuestAttempt {
+    private static final int PROGRESS_FORMAT = 1;
     private QuestModel.Occurrence occurrence;
     private final ConditionRuntime.Instance root;
     private QuestModel.AttemptStatus status = QuestModel.AttemptStatus.ACTIVE;
@@ -61,6 +63,9 @@ public final class QuestAttempt {
 
     public ConditionRuntime.Update onSignal(QuestSignal signal, MinecraftServer server) {
         if (terminal()) {
+            return ConditionRuntime.Update.NONE;
+        }
+        if (signal instanceof QuestSignal.Advancement advancement && observedAdvancements.contains(advancement.advancement().id())) {
             return ConditionRuntime.Update.NONE;
         }
         var update = root.onSignal(signal, new ConditionRuntime.EvaluationContext(server, signal.serverTick()));
@@ -191,6 +196,46 @@ public final class QuestAttempt {
     /// Distinguishes real progress from attempts created only to render quest state.
     public boolean hasProgress() {
         return progressed || status != QuestModel.AttemptStatus.ACTIVE;
+    }
+
+    /// Saves only mutable condition values; the definition supplies their structure on restore.
+    public byte[] saveProgress(long serverTick) {
+        var writer = new ProgressState.Writer(serverTick, System.currentTimeMillis());
+        writer.unsignedInt(PROGRESS_FORMAT);
+        root.writeProgress(writer);
+        writer.unsignedInt(observedAdvancements.size());
+        observedAdvancements.stream().map(Identifier::toString).sorted().forEach(writer::string);
+        return writer.bytes();
+    }
+
+    /// Returns false for an outdated or damaged snapshot, leaving this attempt fresh.
+    public boolean restoreProgress(byte[] bytes, long serverTick) {
+        try {
+            var reader = new ProgressState.Reader(bytes, serverTick, System.currentTimeMillis());
+            if (reader.unsignedInt(PROGRESS_FORMAT) != PROGRESS_FORMAT) {
+                throw new IllegalArgumentException("Unsupported progress format");
+            }
+            root.readProgress(reader);
+            int count = reader.unsignedInt(1024);
+            for (int index = 0; index < count; index++) {
+                Identifier id = Identifier.tryParse(reader.string());
+                if (id == null) throw new IllegalArgumentException("Invalid advancement identifier");
+                observedAdvancements.add(id);
+            }
+            reader.finish();
+            progressed = true;
+            lastUpdatedTick = serverTick;
+            refreshStatus();
+            return true;
+        } catch (RuntimeException error) {
+            PolyQuest.LOGGER.warn("Discarding invalid saved progress for quest {}: {}", occurrence.definition().id(), error.getMessage());
+            root.reset();
+            observedAdvancements.clear();
+            progressed = false;
+            lastUpdatedTick = serverTick;
+            refreshStatus();
+            return false;
+        }
     }
 
     public void close() {

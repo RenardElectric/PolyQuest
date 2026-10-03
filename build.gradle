@@ -5,6 +5,7 @@ plugins {
 version = mod_version
 
 repositories {
+    mavenLocal()
     maven {
         name = "Nucleoid"
         url = uri("https://maven.nucleoid.xyz")
@@ -31,7 +32,6 @@ loom {
             }
             configureEach {
                 jvmArguments.add("-XX:+AllowEnhancedClassRedefinition")
-                preferGradleTask.set(true)
             }
         }
     }

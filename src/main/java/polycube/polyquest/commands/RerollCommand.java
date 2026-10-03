@@ -11,14 +11,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.permissions.PermissionLevel;
 import org.jspecify.annotations.Nullable;
-import polycube.polycore.commands.CommandResult;
 import polycube.polycore.commands.PolyCommand;
 import polycube.polycore.text.TextComponents;
-import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.model.QuestModel;
-import polycube.polyquest.runtime.QuestManager;
-import polycube.polyquest.rotation.DailyRotationService;
 
 import java.util.Arrays;
 import java.util.List;
@@ -27,10 +23,8 @@ import java.util.Set;
 public final class RerollCommand extends PolyCommand {
     public RerollCommand() {
         super(
-                PolyQuest.MOD_ID,
                 "reroll",
                 "Rerolls daily quests or selects a specific quest for one difficulty",
-                "[difficulty] [quest_id]",
                 PermissionLevel.GAMEMASTERS
         );
     }
@@ -65,25 +59,25 @@ public final class RerollCommand extends PolyCommand {
                                 })));
     }
 
-    private static QuestModel.@Nullable Difficulty difficulty(CommandSourceStack source, String raw) {
+    private QuestModel.@Nullable Difficulty difficulty(CommandSourceStack source, String raw) {
         var result = QuestModel.Difficulty.byName(raw);
         if (result.isEmpty()) {
-            source.sendFailure(TextComponents.error("Expected easy, medium, or hard."));
+            source.sendFailure(textComponents.error("Expected easy, medium, or hard."));
             return null;
         }
         return result.get();
     }
 
-    private static int rerollRandom(CommandSourceStack source, List<QuestModel.Difficulty> difficulties) throws CommandSyntaxException {
-        var manager = CommandResult.require(PolyQuestApi.manager());
+    private int rerollRandom(CommandSourceStack source, List<QuestModel.Difficulty> difficulties) throws CommandSyntaxException {
+        var manager = commandResult.require(PolyQuestApi.manager());
         var changed = manager.reroll(difficulties);
         if (changed.isEmpty()) {
-            source.sendFailure(TextComponents.error("No eligible daily quests are available for " + difficultyNames(Set.copyOf(difficulties)) + "."));
+            source.sendFailure(textComponents.error("No eligible daily quests are available for " + difficultyNames(Set.copyOf(difficulties)) + "."));
             return 0;
         }
 
         var player = source.getPlayerOrException().nameAndId();
-        var message = TextComponents.success("Rerolled daily slots: " + difficultyNames(changed));
+        var message = textComponents.success("Rerolled daily slots: " + difficultyNames(changed));
         for (var difficulty : QuestModel.Difficulty.values()) {
             if (!changed.contains(difficulty)) continue;
             var selected = manager.dailyAssignment().slots().get(difficulty);
@@ -100,14 +94,14 @@ public final class RerollCommand extends PolyCommand {
                 .filter(difficulties::contains).map(QuestModel.Difficulty::getSerializedName).toList());
     }
 
-    private static int rerollSelected(CommandSourceStack source, QuestModel.Difficulty difficulty, Identifier questId) throws CommandSyntaxException {
-        var manager = CommandResult.require(PolyQuestApi.manager());
+    private int rerollSelected(CommandSourceStack source, QuestModel.Difficulty difficulty, Identifier questId) throws CommandSyntaxException {
+        var manager = commandResult.require(PolyQuestApi.manager());
         var result = manager.reroll(difficulty, questId);
         return switch (result) {
             case CHANGED -> {
                 var selected = manager.dailyAssignment().slots().get(difficulty);
                 var player = source.getPlayerOrException().nameAndId();
-                source.sendSuccess(() -> TextComponents.success("Selected " + difficulty.getSerializedName() + " daily quest")
+                source.sendSuccess(() -> textComponents.success("Selected " + difficulty.getSerializedName() + " daily quest")
                         .append(TextComponents.field("Quest", QuestCommandText.quest(manager, player, selected))), true);
                 yield 1;
             }
@@ -116,11 +110,11 @@ public final class RerollCommand extends PolyCommand {
                 yield 0;
             }
             case INVALID_QUEST -> {
-                source.sendFailure(TextComponents.error("Quest " + questId + " is not an available " + difficulty.getSerializedName() + " daily quest."));
+                source.sendFailure(textComponents.error("Quest " + questId + " is not an available " + difficulty.getSerializedName() + " daily quest."));
                 yield 0;
             }
             case NO_CANDIDATES -> {
-                source.sendFailure(TextComponents.error("No " + difficulty.getSerializedName() + " daily quests are available."));
+                source.sendFailure(textComponents.error("No " + difficulty.getSerializedName() + " daily quests are available."));
                 yield 0;
             }
         };

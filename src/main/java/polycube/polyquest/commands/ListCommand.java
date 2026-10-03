@@ -9,7 +9,6 @@ import net.minecraft.commands.arguments.GameProfileArgument;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.server.players.NameAndId;
-import polycube.polycore.commands.CommandResult;
 import polycube.polycore.commands.PolyCommand;
 import polycube.polycore.text.TextComponents;
 import polycube.polyquest.PolyQuest;
@@ -25,10 +24,8 @@ public final class ListCommand extends PolyCommand {
 
     public ListCommand() {
         super(
-                PolyQuest.MOD_ID,
                 "list",
                 "Lists all available quests for the player.",
-                "[player] [page]",
                 PermissionLevel.GAMEMASTERS
         );
     }
@@ -51,15 +48,15 @@ public final class ListCommand extends PolyCommand {
                                         IntegerArgumentType.getInteger(context, "page")))));
     }
 
-    private static int list(CommandSourceStack source, Collection<NameAndId> players, int page) throws CommandSyntaxException {
+    private int list(CommandSourceStack source, Collection<NameAndId> players, int page) throws CommandSyntaxException {
         int total = 0;
         for (var player : players) total += list(source, player, page);
         return total;
     }
 
-    private static int list(CommandSourceStack source, NameAndId player, int page) throws CommandSyntaxException {
-        var manager = CommandResult.require(PolyQuestApi.manager());
-        var availableQuests = CommandResult.require(PolyQuestApi.availableQuests());
+    private int list(CommandSourceStack source, NameAndId player, int page) throws CommandSyntaxException {
+        var manager = commandResult.require(PolyQuestApi.manager());
+        var availableQuests = commandResult.require(PolyQuestApi.availableQuests());
         var quests = availableQuests.stream()
                 .sorted(Comparator.comparingInt(ListCommand::displayOrder).thenComparing(occurrence -> occurrence.definition().id().toString()))
                 .map(occurrence -> new QuestEntry(occurrence, manager.attempt(player, occurrence).status()))
@@ -70,7 +67,7 @@ public final class ListCommand extends PolyCommand {
                 .filter(quest -> quest.status() == QuestModel.AttemptStatus.READY_TO_CLAIM)
                 .count();
         long claimed = quests.stream().filter(quest -> quest.status() == QuestModel.AttemptStatus.CLAIMED).count();
-        var message = TextComponents.header("Quests for " + player.name())
+        var message = textComponents.header("Quests for " + player.name())
                 .append(TextComponents.field("Total", TextComponents.value(quests.size())))
                 .append(TextComponents.field("Ready", TextComponents.value(ready)))
                 .append(TextComponents.field("Claimed", TextComponents.value(claimed)));
@@ -95,10 +92,10 @@ public final class ListCommand extends PolyCommand {
     }
 
     /// Adds one compact quest row; the hover card carries objective and reward details.
-    private static void appendQuest(MutableComponent message, QuestEntry entry, NameAndId player) throws CommandSyntaxException {
+    private void appendQuest(MutableComponent message, QuestEntry entry, NameAndId player) throws CommandSyntaxException {
         var occurrence = entry.occurrence();
         var id = occurrence.definition().id();
-        var manager = CommandResult.require(PolyQuestApi.manager());
+        var manager = commandResult.require(PolyQuestApi.manager());
         message.append("\n  ")
                 .append(QuestCommandText.status(entry.status()))
                 .append("  ")

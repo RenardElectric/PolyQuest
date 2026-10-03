@@ -11,7 +11,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.server.players.NameAndId;
-import polycube.polycore.commands.CommandResult;
 import polycube.polycore.commands.PolyCommand;
 import polycube.polycore.text.TextComponents;
 import polycube.polyquest.PolyQuest;
@@ -26,10 +25,8 @@ import java.util.List;
 public final class InspectCommand extends PolyCommand {
     public InspectCommand() {
         super(
-                PolyQuest.MOD_ID,
                 "inspect",
                 "Shows a quest's objective, rewards, availability, and current progress",
-                "<quest> [player]",
                 PermissionLevel.GAMEMASTERS
         );
     }
@@ -56,12 +53,12 @@ public final class InspectCommand extends PolyCommand {
     }
 
     private int inspect(CommandSourceStack source, Identifier id, NameAndId player) throws CommandSyntaxException {
-        var manager = CommandResult.require(PolyQuestApi.manager());
-        QuestModel.Occurrence occurrence = CommandResult.require(PolyQuestApi.quest(id));
+        var manager = commandResult.require(PolyQuestApi.manager());
+        QuestModel.Occurrence occurrence = commandResult.require(PolyQuestApi.quest(id));
         QuestModel.Definition quest = occurrence.definition();
         var display = QuestDisplay.format(manager, source.getServer(), player, occurrence);
 
-        var message = TextComponents.message().append(display.title());
+        var message = textComponents.message().append(display.title());
         for (Component line : display.lines()) {
             message.append("\n").append(line);
         }
@@ -105,7 +102,7 @@ public final class InspectCommand extends PolyCommand {
                 .append("\n  ")
                 .append(QuestCommandText.technicalDetails(occurrence))
                 .append(" ")
-                .append(QuestCommandText.diagnostics(id, player));
+                .append(QuestCommandText.diagnostics(this, id, player));
         source.sendSuccess(() -> message, false);
         return 1;
     }

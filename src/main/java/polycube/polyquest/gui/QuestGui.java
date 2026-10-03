@@ -13,6 +13,7 @@ import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Items;
 import org.jspecify.annotations.Nullable;
 import polycube.polycore.text.TextComponents;
+import polycube.polyquest.PolyQuest;
 import polycube.polyquest.commands.QuestCommandText;
 import polycube.polyquest.model.QuestModel;
 import polycube.polyquest.condition.CompositeConditions;
@@ -136,7 +137,7 @@ public abstract class QuestGui extends SimpleGui {
                         player.sendSystemMessage(QuestCommandText.questClaimed(manager, player.nameAndId(), quest));
                     } else if (interactionCooldown <= 0) {
                         playSound(player, SoundEvents.VILLAGER_NO);
-                        player.sendSystemMessage(TextComponents.error(result.message()));
+                        player.sendSystemMessage(TextComponents.of(PolyQuest.MOD_ID).error(result.message()));
                     }
                     interactionCooldown = 20;
                 });

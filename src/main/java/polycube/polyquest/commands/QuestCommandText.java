@@ -6,6 +6,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.NameAndId;
+import polycube.polycore.commands.PolyCommand;
 import polycube.polycore.text.TextComponents;
 import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
@@ -18,7 +19,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Function;
 
 import static polycube.polycore.text.TextComponents.*;
 import static polycube.polycore.text.TextCore.*;
@@ -145,18 +145,18 @@ public final class QuestCommandText {
     }
 
     public static MutableComponent questChanged() {
-        return message().append("Quests changed.");
+        return TextComponents.of(PolyQuest.MOD_ID).message().append("Quests changed.");
     }
 
     public static MutableComponent questCompleted(QuestManager manager, NameAndId player, QuestModel.Occurrence occurrence) {
-        return message()
+        return TextComponents.of(PolyQuest.MOD_ID).message()
                 .append(colored("Quest completed: ", ChatFormatting.GREEN))
                 .append(quest(manager, player, occurrence))
                 .append(colored(". Visit the Quest Giver to claim your reward.", ChatFormatting.GRAY));
     }
 
     public static MutableComponent questClaimed(QuestManager manager, NameAndId player, QuestModel.Occurrence occurrence) {
-        return message()
+        return TextComponents.of(PolyQuest.MOD_ID).message()
                 .append(colored("Successfully claimed quest: ", ChatFormatting.GREEN))
                 .append(quest(manager, player, occurrence))
                 .append(colored(".", ChatFormatting.GRAY));
@@ -168,7 +168,7 @@ public final class QuestCommandText {
             List<QuestModel.Occurrence> ready
     ) {
         if (ready.isEmpty()) return Optional.empty();
-        var message = message();
+        var message = TextComponents.of(PolyQuest.MOD_ID).message();
         message.append(colored(count(ready.size(), "quest") + " ready to claim: ", ChatFormatting.GREEN));
         int visible = Math.min(ready.size(), MAX_CLAIMABLE_NAMES);
         for (int index = 0; index < visible; index++) {
@@ -182,10 +182,10 @@ public final class QuestCommandText {
         return Optional.of(message.append(colored(". Visit the Quest Giver.", ChatFormatting.GRAY)));
     }
 
-    public static MutableComponent diagnostics(Identifier id, NameAndId player) {
+    public static MutableComponent diagnostics(PolyCommand command, Identifier id, NameAndId player) {
         var diagnostic = PolyQuestApi.inspect(player, id);
         if (diagnostic.error().isPresent()) {
-            return hover(Component.literal("[Copy diagnostics]"), error("Failed to retrieve diagnostics for quest " + id + " for player " + player.name() + ": " + diagnostic.error().get()));
+            return hover(Component.literal("[Copy diagnostics]"), command.textComponents.error("Failed to retrieve diagnostics for quest " + id + " for player " + player.name() + ": " + diagnostic.error().get()));
         }
         return copy("[Copy diagnostics]", diagnostic.getOrThrow(), muted("Click to copy full quest diagnostics."));
     }

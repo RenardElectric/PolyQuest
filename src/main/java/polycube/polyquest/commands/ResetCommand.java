@@ -9,12 +9,9 @@ import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.server.players.NameAndId;
-import polycube.polycore.commands.CommandResult;
 import polycube.polycore.commands.PolyCommand;
 import polycube.polycore.text.TextComponents;
-import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
-import polycube.polyquest.presentation.QuestDisplay;
 
 import java.util.Collection;
 import java.util.List;
@@ -22,10 +19,8 @@ import java.util.List;
 public final class ResetCommand extends PolyCommand {
     public ResetCommand() {
         super(
-                PolyQuest.MOD_ID,
                 "reset",
                 "Resets one of your quest attempts and its claim state",
-                "<quest> [player]",
                 PermissionLevel.GAMEMASTERS
         );
     }
@@ -51,13 +46,13 @@ public final class ResetCommand extends PolyCommand {
         return total;
     }
 
-    private static int reset(CommandSourceStack source, Identifier id, NameAndId player) throws CommandSyntaxException {
-        var manager = CommandResult.require(PolyQuestApi.manager());
-        var occurrence = CommandResult.require(PolyQuestApi.quest(id));
+    private int reset(CommandSourceStack source, Identifier id, NameAndId player) throws CommandSyntaxException {
+        var manager = commandResult.require(PolyQuestApi.manager());
+        var occurrence = commandResult.require(PolyQuestApi.quest(id));
         var previousStatus = manager.attempt(player, occurrence).status();
-        CommandResult.require(PolyQuestApi.reset(player, id));
+        commandResult.require(PolyQuestApi.reset(player, id));
 
-        var message = TextComponents.success("Reset ")
+        var message = textComponents.success("Reset ")
                 .append(QuestCommandText.quest(manager, player, occurrence))
                 .append(" for ").append(TextComponents.value(player.name())).append(".")
                 .append(TextComponents.field("Previous status", QuestCommandText.status(previousStatus)));

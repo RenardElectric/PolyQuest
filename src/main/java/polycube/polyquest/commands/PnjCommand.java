@@ -39,10 +39,8 @@ public final class PnjCommand extends PolyCommand {
 
     public PnjCommand() {
         super(
-                PolyQuest.MOD_ID,
                 "pnj",
                 "Spawns an immovable mannequin that opens the quest journal",
-                " | <pos> <yaw> <pitch>",
                 PermissionLevel.GAMEMASTERS
         );
         NpcCreator.registerNpcType(QUEST_GIVER_TYPE, QUEST_GIVER_FACTORY);
@@ -65,7 +63,7 @@ public final class PnjCommand extends PolyCommand {
         return spawn(source, player.position(), Vec2.ZERO);
     }
 
-    private static int spawn(CommandSourceStack source, Vec3 pos, Vec2 rotation) {
+    private int spawn(CommandSourceStack source, Vec3 pos, Vec2 rotation) {
 
         // skin from: https://www.minecraftskins.com/skin/24256690/fundy-explorer/
         var skinPatch = PlayerSkin.Patch.create(
@@ -81,12 +79,12 @@ public final class PnjCommand extends PolyCommand {
         );
 
         if (result.error().isPresent()) {
-            source.sendFailure(TextComponents.error("Failed to create the quest giver: " + result.error().get()));
+            source.sendFailure(textComponents.error("Failed to create the quest giver: " + result.error().get()));
             return 0;
         }
 
         source.sendSuccess(
-                () -> TextComponents.success("Spawned quest giver at")
+                () -> textComponents.success("Spawned quest giver at")
                         .append(TextComponents.value(" %.2f %.2f %.2f".formatted(pos.x, pos.y, pos.z)))
                         .append(TextComponents.muted(" (yaw: %.2f, pitch: %.2f)".formatted(Mth.wrapDegrees(rotation.x), Mth.wrapDegrees(rotation.y)))),
                 true

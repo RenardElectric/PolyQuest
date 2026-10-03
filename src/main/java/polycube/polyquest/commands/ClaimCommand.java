@@ -9,10 +9,8 @@ import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.PermissionLevel;
-import polycube.polycore.commands.CommandResult;
 import polycube.polycore.commands.PolyCommand;
 import polycube.polycore.text.TextComponents;
-import polycube.polyquest.PolyQuest;
 import polycube.polyquest.api.PolyQuestApi;
 import polycube.polyquest.claim.QuestClaimService;
 import polycube.polyquest.model.QuestModel;
@@ -23,10 +21,8 @@ import java.util.List;
 public final class ClaimCommand extends PolyCommand {
     public ClaimCommand() {
         super(
-                PolyQuest.MOD_ID,
                 "claim",
                 "Claims a completed quest or retries its pending reward",
-                "<quest> [player]",
                 PermissionLevel.GAMEMASTERS
         );
     }
@@ -46,7 +42,7 @@ public final class ClaimCommand extends PolyCommand {
                                         EntityArgument.getPlayers(context, "player")))));
     }
 
-    private static int claim(CommandSourceStack source, Identifier id, Collection<ServerPlayer> players) throws CommandSyntaxException {
+    private int claim(CommandSourceStack source, Identifier id, Collection<ServerPlayer> players) throws CommandSyntaxException {
         int total = 0;
         for (var player : players) {
             total += claim(source, id, player);
@@ -54,19 +50,19 @@ public final class ClaimCommand extends PolyCommand {
         return total;
     }
 
-    private static int claim(CommandSourceStack source, Identifier id, ServerPlayer player) throws CommandSyntaxException {
-        var manager = CommandResult.require(PolyQuestApi.manager());
-        var result = CommandResult.require(PolyQuestApi.claim(player, id));
+    private int claim(CommandSourceStack source, Identifier id, ServerPlayer player) throws CommandSyntaxException {
+        var manager = commandResult.require(PolyQuestApi.manager());
+        var result = commandResult.require(PolyQuestApi.claim(player, id));
         var occurrence = manager.findOccurrence(id);
         var quest = occurrence.map(value -> QuestCommandText.quest(manager, player.nameAndId(), value)).orElseGet(() -> TextComponents.copy(id.toString(), id.toString()));
 
         if (result.successful()) {
-            var message = TextComponents.success("Claimed ").append(quest);
+            var message = textComponents.success("Claimed ").append(quest);
             source.sendSuccess(() -> message, true);
             return 1;
         }
         if (result.state() == QuestClaimService.ClaimState.PENDING) {
-            var message = TextComponents.warning("Reward delivery is pending for ")
+            var message = textComponents.warning("Reward delivery is pending for ")
                     .append(quest)
                     .append(TextComponents.field("Reason", TextComponents.value(result.message())))
                     .append("\n");
@@ -75,7 +71,7 @@ public final class ClaimCommand extends PolyCommand {
             return 1;
         }
 
-        var message = TextComponents.error(result.message()).append(TextComponents.field("Quest", quest));
+        var message = textComponents.error(result.message()).append(TextComponents.field("Quest", quest));
         source.sendFailure(message);
         return 0;
     }

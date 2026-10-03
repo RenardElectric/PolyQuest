@@ -1,11 +1,11 @@
 name: Release
-run-name: Release v${{ inputs.version }}
+run-name: Release ${{ inputs.version }}
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version without a leading v (for example, 1.2.3 or 1.2.3-beta.1)
+        description: Release version (for example, 1.2.3 or 1.2.3-beta.1)
         required: true
         type: string
 

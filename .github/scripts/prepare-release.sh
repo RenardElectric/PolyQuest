@@ -11,7 +11,7 @@ if [[ "$GITHUB_REF_TYPE" != "branch" || "$GITHUB_REF_NAME" != "$DEFAULT_BRANCH" 
 fi
 
 if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
-  echo "::error::Version must look like 1.2.3 or 1.2.3-beta.1 (without a leading v)."
+  echo "::error::Version must look like 1.2.3 or 1.2.3-beta.1."
   exit 1
 fi
 
@@ -21,7 +21,7 @@ if [[ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]]; then
   exit 1
 fi
 
-release_tag="v$RELEASE_VERSION"
+release_tag="$RELEASE_VERSION"
 if ! git check-ref-format "refs/tags/$release_tag"; then
   echo "::error::$release_tag is not a valid Git tag."
   exit 1
